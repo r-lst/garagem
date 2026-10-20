@@ -1,0 +1,20 @@
+{
+  "name": "garagem",
+  "version": "1.0.0",
+  "description": "Ferramentas para marcenaria e impressão 3D: pedidos ao Claude, projetos em 3D, edição de STL e cortes de madeira.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test.mjs && node test-projeto.mjs",
+    "build": "node build.mjs"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@fontsource/atkinson-hyperlegible": "^5.3.0",
+    "@fontsource/zilla-slab": "^5.3.0",
+    "esbuild": "^0.28.2",
+    "three": "^0.186.1",
+    "three-bvh-csg": "^0.0.18",
+    "three-mesh-bvh": "^0.9.16"
+  }
+}

@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oficina</title>
+<style>/*FONTS*/</style>
+<style>/*CSS*/</style>
+</head>
+<body>
+<header class="topo">
+  <a class="marca" href="#inicio">
+    <svg viewBox="0 0 40 40" class="logo" aria-hidden="true"><rect x="4" y="11" width="32" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M9 16v16M31 16v16M9 24h22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+    <span>Oficina</span>
+  </a>
+  <nav id="tabs">
+    <a href="#inicio" data-tab="inicio" data-i="inicio"><span>Início</span></a>
+    <a href="#pedir" data-tab="pedir" data-i="pedir"><span>Pedir ao Claude</span></a>
+    <a href="#projeto" data-tab="projeto" data-i="projeto"><span>Ver projeto</span></a>
+    <a href="#peca" data-tab="peca" data-i="peca"><span>Peça 3D</span></a>
+    <a href="#cortes" data-tab="cortes" data-i="cortes"><span>Cortes</span></a>
+    <a href="#perfil" data-tab="perfil" data-i="equip"><span>Equipamento</span></a>
+  </nav>
+</header>
+<main>
+
+<!-- ===== INÍCIO ===== -->
+<section id="tab-inicio" class="tab">
+  <div class="hero">
+    <div class="hero-txt">
+      <p class="sobre">Marcenaria · Impressão 3D</p>
+      <h1>Pensa o projeto.<br>Vê-o antes de cortar.</h1>
+      <p class="lead">Descreve o que queres fazer, conversa com o Claude para afinar as medidas, e vê o resultado em 3D. A lista de cortes e os ficheiros para imprimir saem daqui.</p>
+      <div class="row"><a class="btn grande" href="#pedir" data-i="pedir">Começar um pedido</a><a class="btn sec grande" href="#projeto" data-i="projeto">Ver um exemplo</a></div>
+    </div>
+    <div class="hero-3d" id="hero3d"></div>
+  </div>
+
+  <div class="cartoes">
+    <a class="cartao" href="#pedir"><span class="ci" data-i="pedir"></span><h3>Pedir ao Claude</h3><p>Escreve como te sair. A página faz o pedido certo e o Claude pergunta o que falta.</p><span class="ir" data-i="seta">Abrir</span></a>
+    <a class="cartao" href="#projeto"><span class="ci" data-i="projeto"></span><h3>Ver projeto</h3><p>Cola a resposta do Claude e vê o móvel em 3D, peça a peça, com medidas.</p><span class="ir" data-i="seta">Abrir</span></a>
+    <a class="cartao" href="#peca"><span class="ci" data-i="peca"></span><h3>Peça 3D</h3><p>Abre um STL, muda medidas, faz furos e cortes, e guarda para imprimir.</p><span class="ir" data-i="seta">Abrir</span></a>
+    <a class="cartao" href="#cortes"><span class="ci" data-i="cortes"></span><h3>Cortes de madeira</h3><p>Quantas tábuas comprar e como cortar cada uma, com o mínimo de desperdício.</p><span class="ir" data-i="seta">Abrir</span></a>
+  </div>
+
+  <div class="como">
+    <h2>Como funciona</h2>
+    <ol class="passos3">
+      <li><b>1</b><div><h4>Descreve</h4><p>Escolhe o tipo de trabalho e escreve a ideia, mesmo que vaga.</p></div></li>
+      <li><b>2</b><div><h4>Conversa</h4><p>Cola no Claude. Ele faz perguntas uma a uma e sugere melhorias.</p></div></li>
+      <li><b>3</b><div><h4>Vê e faz</h4><p>Cola a resposta aqui: vês em 3D, tens a lista de cortes ou o STL.</p></div></li>
+    </ol>
+  </div>
+  <a class="equip-banner" href="#perfil" id="equip-banner"></a>
+</section>
+
+<!-- ===== PEDIR AO CLAUDE ===== -->
+<section id="tab-pedir" class="tab">
+  <div class="cabeca"><h2>Pedir ao Claude</h2><p class="muted">Três passos. Não precisas de saber escrever pedidos: a página trata disso.</p></div>
+  <ol class="stepper" id="stepper">
+    <li data-s="1"><b>1</b> Tipo de trabalho</li>
+    <li data-s="2"><b>2</b> Descrever</li>
+    <li data-s="3"><b>3</b> Copiar e colar</li>
+  </ol>
+
+  <div class="passo" data-passo="1">
+    <h3 class="q">Que tipo de trabalho é?</h3>
+    <div class="tiles" id="modos"></div>
+  </div>
+
+  <div class="passo" data-passo="2" hidden>
+    <div class="escolhido" id="escolhido"></div>
+    <label for="pedido" class="q">O que queres?</label>
+    <textarea id="pedido" rows="7"></textarea>
+    <div class="dicas"><b>Ajuda o Claude se disseres:</b> o que é e para que serve · medidas aproximadas · onde vai ficar · o material que tens. Se não souberes, não faz mal: ele pergunta.</div>
+    <div id="aviso-peca" class="aviso"></div>
+    <div class="row entre">
+      <button class="sec" id="voltar1" data-i="voltar">Voltar</button>
+      <button id="criar" class="grande">Criar pedido <span data-i="seta"></span></button>
+    </div>
+  </div>
+
+  <div class="passo" data-passo="3" hidden>
+    <div class="acoes">
+      <div class="acao"><b>1</b><div><h4>Copiar o pedido</h4><button id="copiar" class="grande" data-i="copiar">Copiar pedido</button><span id="copiado" class="ok" hidden></span></div></div>
+      <div class="acao"><b>2</b><div><h4>Abrir o Claude</h4><a id="abrir-claude" class="btn sec grande" href="https://claude.ai/new" target="_blank" rel="noopener" data-i="abrir">Abrir o Claude</a></div></div>
+      <div class="acao"><b>3</b><div><h4>Colar e enviar</h4><p>Clica na caixa de texto do Claude, carrega <kbd>Ctrl</kbd> + <kbd>V</kbd> e envia. Responde às perguntas uma a uma.</p></div></div>
+    </div>
+    <div class="depois">
+      <h3>Quando o Claude terminar</h3>
+      <p id="pos-passos"></p>
+      <a class="btn" id="ir-destino" href="#projeto" data-i="seta">Ir</a>
+    </div>
+    <details class="ver-pedido"><summary>Ver o pedido completo</summary><textarea id="saida" rows="16" readonly class="code"></textarea></details>
+    <div class="row entre"><button class="sec" id="voltar2" data-i="voltar">Mudar o pedido</button><button class="sec" id="novo-pedido">Fazer outro pedido</button></div>
+  </div>
+</section>
+
+<!-- ===== VER PROJETO ===== -->
+<section id="tab-projeto" class="tab">
+  <div class="split">
+    <div class="panel">
+      <div class="bloco">
+        <h2>Ver projeto</h2>
+        <p class="muted">Cola aqui o bloco de código que o Claude entregou no fim do projeto de madeira.</p>
+        <textarea id="proj-json" rows="7" class="code" placeholder='{"nome": "...", "pecas": [ ... ]}'></textarea>
+        <div class="row"><button id="proj-desenhar" data-i="projeto">Desenhar</button><button id="proj-exemplo" class="sec">Ver um exemplo</button></div>
+        <div id="proj-erro" class="erro"></div>
+      </div>
+      <div id="proj-info" hidden>
+        <div class="bloco">
+          <h3 id="proj-nome"></h3>
+          <div class="medidas-totais" id="proj-medidas"></div>
+          <ul class="avisos" id="proj-avisos"></ul>
+        </div>
+        <div class="bloco">
+          <h3>Peças</h3>
+          <p class="muted">Clica numa peça para a ver no desenho.</p>
+          <table class="lista" id="proj-pecas"></table>
+        </div>
+        <div class="bloco" id="proj-placas-b" hidden>
+          <h3>Placas e peças largas</h3>
+          <p class="muted">Cortam-se de placa (contraplacado, MDF) ou tábua larga, por isso não entram no cálculo de tábuas.</p>
+          <table class="lista" id="proj-placas"></table>
+        </div>
+        <div class="bloco" id="proj-ferr-b" hidden>
+          <h3>Ferragens mostradas</h3>
+          <table class="lista" id="proj-ferr"></table>
+        </div>
+        <div class="bloco destaque">
+          <h3>Lista de cortes</h3>
+          <p class="muted">Já calculada a partir do desenho, separada por tipo de tábua.</p>
+          <button id="proj-cortes" class="grande" data-i="cortes">Calcular tábuas a comprar</button>
+        </div>
+      </div>
+    </div>
+    <div class="viewcol">
+      <div class="viewer papel" id="proj-viewer">
+        <div class="vazio" id="proj-vazio"><div><span data-i="projeto"></span><p>Cola o modelo do Claude e carrega em <b>Desenhar</b>.</p><button class="sec" id="proj-exemplo2">Ver um exemplo</button></div></div>
+        <div class="chip" id="proj-sel" hidden></div>
+        <div class="dica-rato">Arrastar: rodar · Botão direito: mover · Roda: aproximar</div>
+      </div>
+      <div class="ferramentas" id="proj-tools">
+        <div class="seg" id="proj-vistas">
+          <button data-v="3d" class="on">3D</button><button data-v="frente">Frente</button><button data-v="lado">Lado</button><button data-v="cima">Cima</button>
+        </div>
+        <label class="slider" data-i="explodir"><span>Separar peças</span><input type="range" id="proj-explodir" min="0" max="100" value="0"></label>
+        <label class="tog"><input type="checkbox" id="proj-cotas" checked> Medidas</label>
+        <label class="tog"><input type="checkbox" id="proj-nomes"> Nomes</label>
+        <label class="tog"><input type="checkbox" id="proj-ferragens" checked> Ferragens</label>
+        <button class="sec" id="proj-imagem" data-i="imagem">Guardar imagem</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== PEÇA 3D ===== -->
+<section id="tab-peca" class="tab">
+  <div class="split">
+    <div class="panel" id="painel">
+
+      <details open id="sec-abrir" class="bloco">
+        <summary><span class="num">1</span> Abrir ou criar a peça</summary>
+        <label class="ficheiro" data-i="abrirficheiro"><span>Abrir ficheiro STL</span><input type="file" id="ficheiro" accept=".stl"></label>
+        <p class="muted">Também podes arrastar o ficheiro para o desenho.</p>
+        <h4>Ou criar uma peça simples</h4>
+        <select id="gerador"></select>
+        <div id="gerador-campos" class="grid2"></div>
+        <div class="row"><button id="gerar" class="sec">Criar esta peça</button></div>
+        <h4>Ou importar do Claude</h4>
+        <textarea id="json" rows="5" class="code" placeholder='Cola aqui o bloco de código do Claude'></textarea>
+        <label class="tog"><input type="checkbox" id="json-base"> Aplicar sobre a peça que está aberta</label>
+        <div class="row"><button id="construir">Construir</button></div>
+        <div id="json-erro" class="erro"></div>
+      </details>
+
+      <details id="sec-medidas" class="bloco">
+        <summary><span class="num">2</span> Medidas e tamanho</summary>
+        <div class="grid3">
+          <div><label for="mx">X (mm)</label><input type="number" id="mx" step="any" min="0"></div>
+          <div><label for="my">Y (mm)</label><input type="number" id="my" step="any" min="0"></div>
+          <div><label for="mz">Z (mm)</label><input type="number" id="mz" step="any" min="0"></div>
+        </div>
+        <label class="tog"><input type="checkbox" id="prop" checked> Manter as proporções</label>
+        <div class="row"><button id="aplicar-medidas">Aplicar medidas</button></div>
+        <label for="pct">Ou escalar em percentagem</label>
+        <div class="row" style="margin-top:0"><input type="number" id="pct" value="100" step="any" min="1" style="max-width:140px"> <span>%</span><button id="aplicar-pct" class="sec">Escalar</button></div>
+      </details>
+
+      <details id="sec-alterar" class="bloco">
+        <summary><span class="num">3</span> Alterar a peça</summary>
+        <details id="sec-furo" class="sub">
+          <summary>Fazer um furo</summary>
+          <div class="grid2">
+            <div><label for="f-eixo">Direção do furo</label>
+              <select id="f-eixo"><option value="z">De cima para baixo</option><option value="x">Da esquerda para a direita</option><option value="y">Da frente para trás</option></select></div>
+            <div><label for="f-d">Diâmetro (mm)</label><input type="number" id="f-d" value="5" step="any" min="0.1"></div>
+            <div><label for="f-a" id="f-a-l">Posição X</label><input type="number" id="f-a" step="any"></div>
+            <div><label for="f-b" id="f-b-l">Posição Y</label><input type="number" id="f-b" step="any"></div>
+            <div><label for="f-prof">Profundidade (0 = atravessa)</label><input type="number" id="f-prof" value="0" step="any" min="0"></div>
+            <div><label for="f-from">Entra por</label><select id="f-from"><option value="topo">Cima / direita / trás</option><option value="base">Baixo / esquerda / frente</option></select></div>
+          </div>
+          <p class="muted">O furo aparece a vermelho antes de aplicares. Furos impressos saem um pouco mais pequenos: soma 0,2 mm.</p>
+          <div class="row"><button id="aplicar-furo">Fazer o furo</button></div>
+        </details>
+        <details id="sec-corte" class="sub">
+          <summary>Cortar a peça</summary>
+          <div class="grid2">
+            <div><label for="c-eixo">Cortar ao longo de</label>
+              <select id="c-eixo"><option value="z">Altura (Z)</option><option value="x">Comprimento (X)</option><option value="y">Largura (Y)</option></select></div>
+            <div><label for="c-pos">Posição do corte (mm)</label><input type="number" id="c-pos" step="any" min="0"></div>
+          </div>
+          <label for="c-keep">Ficar com</label>
+          <select id="c-keep"></select>
+          <p class="muted">A parte a retirar aparece a vermelho antes de aplicares.</p>
+          <div class="row"><button id="aplicar-corte">Cortar</button><button id="guardar-duas" class="sec">Guardar as duas partes</button></div>
+        </details>
+        <details id="sec-base" class="sub">
+          <summary>Juntar base plana</summary>
+          <p class="muted">Ajuda peças que descolam da mesa.</p>
+          <div class="grid2">
+            <div><label for="b-m">Sobra à volta (mm)</label><input type="number" id="b-m" value="3" step="any" min="0"></div>
+            <div><label for="b-t">Espessura (mm)</label><input type="number" id="b-t" value="2" step="any" min="0.2"></div>
+          </div>
+          <div class="row"><button id="aplicar-base">Juntar base</button></div>
+        </details>
+        <details id="sec-rodar" class="sub">
+          <summary>Rodar, espelhar, assentar</summary>
+          <label>Rodar</label>
+          <div class="toolbar">
+            <button class="sec" data-rot="x,90">X +90°</button><button class="sec" data-rot="y,90">Y +90°</button><button class="sec" data-rot="z,90">Z +90°</button>
+            <button class="sec" data-rot="x,-90">X −90°</button><button class="sec" data-rot="y,-90">Y −90°</button><button class="sec" data-rot="z,-90">Z −90°</button>
+          </div>
+          <label>Espelhar</label>
+          <div class="toolbar"><button class="sec" data-mir="x">Esquerda ↔ direita</button><button class="sec" data-mir="y">Frente ↔ trás</button><button class="sec" data-mir="z">Cima ↔ baixo</button></div>
+          <label>Posição</label>
+          <div class="toolbar"><button class="sec" id="assentar">Centrar e assentar na mesa</button></div>
+        </details>
+      </details>
+
+      <div class="bloco destaque" id="sec-guardar">
+        <h3><span class="num">4</span> Guardar</h3>
+        <label for="nome-saida">Nome do ficheiro</label>
+        <input type="text" id="nome-saida" value="peca.stl">
+        <div class="row"><button id="guardar" class="grande" data-i="guardar">Guardar STL</button></div>
+        <p class="muted">Vai para a pasta Transferências. Abre-o no Cura ou no Creality Print.</p>
+      </div>
+    </div>
+
+    <div class="viewcol">
+      <div class="viewer" id="viewer">
+        <div class="vazio" id="vazio"><div><span data-i="peca"></span><p>Abre um ficheiro STL, cria uma peça ou importa do Claude.</p></div></div>
+        <div class="dica-rato">Arrastar: rodar · Botão direito: mover · Roda: aproximar</div>
+      </div>
+      <div class="ferramentas">
+        <button class="sec" id="desfazer" disabled data-i="desfazer">Desfazer</button>
+        <button class="sec" id="vista" data-i="enquadrar">Enquadrar</button>
+        <div class="cores" id="cores-pla" title="Cor do filamento"></div>
+      </div>
+      <div id="info" class="bloco"><span class="muted">Sem peça aberta.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== CORTES ===== -->
+<section id="tab-cortes" class="tab">
+  <div class="cortes-wrap">
+    <div class="bloco" id="cortes-form">
+      <h2>Cortes de madeira</h2>
+      <p class="muted">Diz que peças precisas e o comprimento das tábuas. Recebes quantas tábuas comprar e como cortar cada uma.</p>
+      <div class="grid3">
+        <div><label for="t-comp">Comprimento da tábua</label><input type="number" id="t-comp" value="2400" step="any" min="1"></div>
+        <div><label for="t-unid">Unidade</label><select id="t-unid"><option value="1">mm</option><option value="10">cm</option></select></div>
+        <div><label for="t-serra">Corte da serra (mm)</label><input type="number" id="t-serra" value="3" step="any" min="0"></div>
+      </div>
+      <label for="t-aparo">Aparo em cada ponta da tábua (mm)</label>
+      <input type="number" id="t-aparo" value="0" step="any" min="0" style="max-width:200px">
+      <label for="t-lista">Peças — uma por linha: <i>nome; comprimento; quantidade</i></label>
+      <textarea id="t-lista" rows="9" class="code" placeholder="tampo; 1200; 2&#10;perna; 700; 4&#10;travessa; 500; 3"></textarea>
+      <p class="muted">Também aceita "800 x 2" ou só "800". Uma linha começada por <b>#</b> separa tipos de tábua (ex.: <i># Tábua 90×20</i>).</p>
+      <div class="row"><button id="calcular" class="grande" data-i="cortes">Calcular</button><button id="exemplo" class="sec">Ver exemplo</button></div>
+      <div id="t-erro" class="erro"></div>
+    </div>
+    <div class="bloco" id="t-saida" hidden></div>
+  </div>
+</section>
+
+<!-- ===== EQUIPAMENTO ===== -->
+<section id="tab-perfil" class="tab">
+  <div class="bloco estreito">
+    <h2>O meu equipamento</h2>
+    <p class="muted">Preenche uma vez. Fica guardado neste computador e vai em todos os pedidos ao Claude, para ele não perguntar outra vez.</p>
+    <h3>Impressora 3D</h3>
+    <div class="grid2">
+      <div><label for="p-impressora">Modelo</label><input type="text" id="p-impressora" data-k="impressora"></div>
+      <div><label for="p-material">Material</label><input type="text" id="p-material" data-k="material"></div>
+      <div><label for="p-bico">Bico (mm)</label><input type="text" id="p-bico" data-k="bico"></div>
+      <div><label for="p-slicer">Programa de laminação</label><input type="text" id="p-slicer" data-k="slicer"></div>
+    </div>
+    <label>Volume de impressão X × Y × Z (mm)</label>
+    <div class="grid3"><input type="number" data-k="vx" aria-label="X" step="any"><input type="number" data-k="vy" aria-label="Y" step="any"><input type="number" data-k="vz" aria-label="Z" step="any"></div>
+    <h3>Marcenaria</h3>
+    <label for="p-ferr">Ferramentas e máquinas que tenho</label>
+    <textarea id="p-ferr" rows="4" data-k="ferramentas" placeholder="Ex.: serra circular, tico-tico, tupia, berbequim, lixadeira orbital, esquadros, grampos..."></textarea>
+    <label for="p-mad">Madeiras e materiais que uso habitualmente</label>
+    <textarea id="p-mad" rows="3" data-k="madeiras" placeholder="Ex.: pinho, contraplacado de 18 mm, MDF..."></textarea>
+    <label for="p-notas">Outras notas (opcional)</label>
+    <textarea id="p-notas" rows="3" data-k="notas" placeholder="Ex.: a oficina é pequena, não tenho aspirador..."></textarea>
+    <p id="p-guardado" class="ok" hidden>Guardado ✓</p>
+  </div>
+</section>
+
+</main>
+<div id="toast" class="toast"></div>
+<script>/*JS*/</script>
+</body>
+</html>
