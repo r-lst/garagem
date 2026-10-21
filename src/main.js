@@ -9,6 +9,9 @@ import { GERADORES, buildSpec, extractJSON } from './shapes.js';
 import { parseLines, planGroups } from './cuts.js';
 import { buildPrompt, MODOS } from './prompts.js';
 import { icon, fillIcons } from './icons.js';
+import * as H from './historico.js';
+import { sincronizar, lerConfig, gravarConfig } from './sync.js';
+import { WORKER_URL } from './config.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -56,7 +59,7 @@ function equipBanner() {
 equipBanner();
 
 // ================= Navegação =================
-const TABS = ['inicio', 'pedir', 'projeto', 'peca', 'cortes', 'perfil'];
+const TABS = ['inicio', 'pedir', 'projeto', 'peca', 'cortes', 'historico', 'perfil'];
 let tabAtual = '';
 function showTab(name) {
   if (!TABS.includes(name)) name = 'inicio';
@@ -68,6 +71,7 @@ function showTab(name) {
     if (name === 'projeto') { JV.resize(); if (projItems && !projFitted) setView('3d'); }
     if (name === 'inicio') heroStart(); else heroStop();
   });
+  if (name === 'historico') { renderHist(); agendarSync(100); }
   window.scrollTo(0, 0);
 }
 window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
@@ -195,7 +199,7 @@ $('#modos').addEventListener('click', (e) => {
 });
 $('#voltar1').addEventListener('click', () => setStep(1));
 $('#voltar2').addEventListener('click', () => setStep(2));
-$('#novo-pedido').addEventListener('click', () => { $('#pedido').value = ''; setStep(1); });
+$('#novo-pedido').addEventListener('click', () => { $('#pedido').value = ''; pedidoAtualId = null; setStep(1); });
 $('#criar').addEventListener('click', () => {
   const texto = $('#pedido').value;
   if (!texto.trim() && !confirm('Não escreveste nada. Queres criar o pedido na mesma?')) return;
@@ -206,6 +210,11 @@ $('#criar').addEventListener('click', () => {
   ir.hidden = !d;
   if (d) { ir.href = d[0]; ir.innerHTML = icon('seta') + d[1]; }
   $('#copiado').hidden = true;
+  if (H.MODOS_HIST.includes(modo)) {
+    const r = H.registarPedido(hist, { id: pedidoAtualId, modo, texto, pedido: $('#saida').value });
+    pedidoAtualId = r.id;
+    setHist(r.lista);
+  }
   setStep(3);
 });
 $('#copiar').addEventListener('click', async () => {
@@ -800,22 +809,26 @@ JV.renderer.domElement.addEventListener('pointerup', (e) => {
   else if (projSel) selectKey(projSel);
 });
 
-function readProj() {
+function readProj(registar = true) {
   const erro = $('#proj-erro');
   erro.className = 'erro';
   try {
     const spec = extractJSON($('#proj-json').value);
     if (spec.operacoes && !spec.pecas) throw new Error('Isto é uma peça para impressão 3D. Cola-a em "Peça 3D" → "Importar do Claude".');
     showProject(spec);
-    toast('Projeto desenhado.');
+    if (registar) {
+      const r = H.registarProjeto(hist, spec);
+      if (r.lista !== hist) setHist(r.lista);
+      toast('Projeto desenhado. Ficou guardado no Histórico.');
+    } else toast('Projeto desenhado.');
   } catch (e) {
     console.error(e);
     erro.textContent = e.message || String(e);
     erro.className = 'erro on';
   }
 }
-$('#proj-desenhar').addEventListener('click', () => later(readProj));
-const verExemplo = () => { $('#proj-json').value = JSON.stringify(PJ.EXEMPLO_PROJETO, null, 1); later(readProj); };
+$('#proj-desenhar').addEventListener('click', () => later(() => readProj(true)));
+const verExemplo = () => { $('#proj-json').value = JSON.stringify(PJ.EXEMPLO_PROJETO, null, 1); later(() => readProj(false)); };
 $('#proj-exemplo').addEventListener('click', verExemplo);
 $('#proj-exemplo2').addEventListener('click', verExemplo);
 
@@ -944,6 +957,158 @@ function renderPlans(plans, f) {
   $('#imprimir').addEventListener('click', () => window.print());
   out.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+
+// ================= Histórico =================
+const LS = { getItem(k) { try { return localStorage.getItem(k); } catch { return null; } }, setItem(k, v) { localStorage.setItem(k, v); } };
+let hist = H.carregar(LS);
+let pedidoAtualId = null;
+const NOMES_MODO = Object.fromEntries(Object.entries(MODOS).map(([k, m]) => [k, m.nome]));
+const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const quando = (t) => { const d = new Date(t), p = (n) => String(n).padStart(2, '0'); return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}, ${p(d.getHours())}:${p(d.getMinutes())}`; };
+
+function setHist(lista) {
+  hist = lista;
+  if (!H.guardar(LS, hist)) toast('Não consegui guardar o histórico neste browser.', true);
+  renderHist();
+  agendarSync();
+}
+function renderHist() {
+  const lista = H.ordenados(hist);
+  if (!lista.length) {
+    $('#hist-lista').innerHTML = `<div class="bloco hist-vazio"><span class="ci">${icon('historico')}</span><div><p>Ainda não há pedidos. Quando fizeres um pedido de madeira, um plano de trabalho ou "outra coisa", aparece aqui.</p><a class="btn" href="#pedir">${icon('pedir')}Fazer um pedido</a></div></div>`;
+    return;
+  }
+  $('#hist-lista').innerHTML = lista.map((e) => {
+    const pronto = e.estado === 'projeto';
+    const texto = String(e.texto || '').trim();
+    return `<article class="hist-item" data-id="${esc(e.id)}">
+      <div class="hist-top"><span class="ci">${icon(MODO_INFO[e.modo]?.i || 'outro')}</span>
+        <div class="hist-tit"><h3>${esc(H.titulo(e, NOMES_MODO))}</h3><p class="muted">${esc(quando(e.criado))} · ${esc(NOMES_MODO[e.modo] || '')}</p></div>
+        <span class="estado ${pronto ? 'pronto' : ''}">${pronto ? icon('certo') + 'Projeto pronto' : 'Pedido feito'}</span></div>
+      ${texto && (pronto || texto.length > 60) ? `<p class="hist-texto">«${esc(texto)}»</p>` : ''}
+      <div class="row">
+        ${pronto ? `<button data-acao="ver">${icon('projeto')}Ver em 3D</button>` : ''}
+        ${e.pedido ? `<button class="sec" data-acao="copiar">${icon('copiar')}Copiar o pedido</button>` : ''}
+        <button class="sec" data-acao="apagar">${icon('apagar')}Apagar</button>
+      </div></article>`;
+  }).join('');
+}
+async function copiarTexto(txt) {
+  try { await navigator.clipboard.writeText(txt); return true; } catch { /* método antigo */ }
+  const ta = document.createElement('textarea');
+  ta.value = txt;
+  ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  let done = false;
+  try { done = document.execCommand('copy'); } catch { /* nada */ }
+  ta.remove();
+  return done;
+}
+$('#hist-lista').addEventListener('click', async (ev) => {
+  const b = ev.target.closest('[data-acao]');
+  if (!b) return;
+  const e = hist.find((x) => x.id === b.closest('[data-id]').dataset.id);
+  if (!e) return;
+  if (b.dataset.acao === 'ver') {
+    $('#proj-json').value = JSON.stringify(e.projeto, null, 1);
+    goto('projeto');
+    later(() => readProj(false));
+  } else if (b.dataset.acao === 'copiar') {
+    if (await copiarTexto(e.pedido)) toast('Pedido copiado. Cola-o no Claude com Ctrl + V.');
+    else toast('Não consegui copiar. Faz o pedido outra vez em "Pedir ao Claude".', true);
+  } else if (b.dataset.acao === 'apagar') {
+    if (!confirm(`Apagar "${H.titulo(e, NOMES_MODO)}" do histórico?`)) return;
+    if (pedidoAtualId === e.id) pedidoAtualId = null;
+    setHist(H.apagar(hist, e.id));
+    toast('Apagado.');
+  }
+});
+
+$('#hist-exportar').addEventListener('click', () => {
+  const dia = new Date().toISOString().slice(0, 10);
+  download(JSON.stringify(H.exportar({ perfil, historico: hist }), null, 1), `garagem-copia-${dia}.json`, 'application/json');
+  toast('Cópia guardada na pasta Transferências.');
+});
+$('#hist-importar').addEventListener('change', async (ev) => {
+  const f = ev.target.files[0];
+  ev.target.value = '';
+  if (!f) return;
+  try {
+    const imp = H.importar(await f.text());
+    if (!confirm('Recuperar esta cópia? O equipamento passa a ser o da cópia, e os pedidos da cópia juntam-se aos que já estão aqui.')) return;
+    if (imp.perfil) {
+      Object.assign(perfil, PERFIL_DEFAULT, imp.perfil);
+      savePerfil();
+      $$('[data-k]').forEach((el) => (el.value = perfil[el.dataset.k] ?? ''));
+      matPeca.color.set(perfil.corPLA);
+      marcarCor(); drawBed(); updateInfo(); equipBanner();
+    }
+    setHist(H.juntar(hist, imp.historico));
+    toast('Cópia recuperada.');
+  } catch (e) { toast(e.message || String(e), true); }
+});
+
+// ---------- cópia online (Worker) ----------
+const syncCfg = lerConfig(LS);
+let syncT = null, syncA = false, syncEstado = null;
+const syncLigado = () => !!(WORKER_URL && syncCfg.codigo);
+function agendarSync(ms = 1500) {
+  if (!syncLigado()) return;
+  clearTimeout(syncT);
+  syncT = setTimeout(fazerSync, ms);
+}
+async function fazerSync() {
+  if (!syncLigado()) return;
+  if (syncA) { agendarSync(); return; }
+  syncA = true;
+  mostrarSync();
+  try {
+    const junta = await sincronizar(WORKER_URL, syncCfg.codigo, hist);
+    const novo = H.juntar(hist, junta); // o pai pode ter mudado algo durante o pedido
+    if (!H.iguais(novo, hist)) { hist = novo; H.guardar(LS, hist); renderHist(); }
+    if (!H.iguais(novo, junta)) agendarSync();
+    syncCfg.ultima = Date.now();
+    gravarConfig(LS, syncCfg);
+    syncEstado = { ok: true };
+  } catch (e) { syncEstado = { ok: false, msg: e.message || String(e) }; }
+  syncA = false;
+  mostrarSync();
+}
+function mostrarSync() {
+  $('#sync-bloco').hidden = !WORKER_URL;
+  const el = $('#hist-sync');
+  const est = $('#sync-estado');
+  let h = '', cls = '';
+  if (!syncLigado()) { el.hidden = true; est.className = 'muted'; est.textContent = 'Desligada. O histórico fica só neste computador.'; return; }
+  if (syncA) h = 'A guardar a cópia online…';
+  else if (syncEstado?.ok) { h = `✓ Cópia online em dia${syncCfg.ultima ? ' (' + quando(syncCfg.ultima) + ')' : ''}.`; cls = 'ok'; }
+  else if (syncEstado) { h = `✗ Cópia online: ${syncEstado.msg} O histórico continua guardado neste computador.`; cls = 'bad'; }
+  else h = 'Cópia online ligada.';
+  el.hidden = false;
+  el.className = 'hist-sync ' + cls;
+  el.textContent = h;
+  est.className = cls;
+  est.textContent = h;
+}
+$('#sync-ligar').addEventListener('click', () => {
+  const c = $('#sync-codigo').value.trim();
+  if (!c) { toast('Escreve o código de sincronização.', true); return; }
+  syncCfg.codigo = c;
+  gravarConfig(LS, syncCfg);
+  $('#sync-codigo').value = '';
+  syncEstado = null;
+  fazerSync();
+});
+$('#sync-desligar').addEventListener('click', () => {
+  if (!syncCfg.codigo || !confirm('Desligar a cópia online neste computador? O que já lá está não é apagado.')) return;
+  delete syncCfg.codigo;
+  gravarConfig(LS, syncCfg);
+  syncEstado = null;
+  mostrarSync();
+});
+mostrarSync();
+agendarSync(500);
 
 // ================= Arranque =================
 drawBed();

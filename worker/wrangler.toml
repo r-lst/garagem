@@ -1,0 +1,19 @@
+name = "garagem"
+main = "index.js"
+compatibility_date = "2025-09-01"
+
+[vars]
+# Repositório PRIVADO onde fica o histórico ("dono/nome")
+REPO = "r-lst/MUDAR-PARA-O-REPO-DE-DADOS"
+RAMO = "main"
+FICHEIRO = "historico.json"
+# Páginas que podem usar este Worker. Para testar o dist/index.html aberto com duplo clique, juntar ",null".
+ORIGENS = "https://r-lst.github.io"
+
+# Limite: 30 pedidos por minuto por endereço IP
+[[ratelimits]]
+name = "LIMITE"
+namespace_id = "1001"
+  [ratelimits.simple]
+  limit = 30
+  period = 60

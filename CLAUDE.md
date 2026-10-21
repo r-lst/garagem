@@ -1,6 +1,6 @@
 # Garagem
 
-App web estática (sem servidor) para marcenaria e impressão 3D. Publicada em https://r-lst.github.io/garagem/
+App web estática para marcenaria e impressão 3D, com um Cloudflare Worker para o que precisa de rede (ver **Rede**). Publicada em https://r-lst.github.io/garagem/
 
 ## Para quem é
 - **Utilizador final:** o pai do Leston, 70 e tal anos, usa o Claude gratuito (conversa no browser, sem API). Precisa de letra grande, poucos campos por ecrã, nada técnico. Tem uma Creality K1 (PLA, volume 220×220×250 mm) e trabalha madeira na garagem do prédio.
@@ -9,22 +9,47 @@ App web estática (sem servidor) para marcenaria e impressão 3D. Publicada em h
 ## Regras do projeto
 - Tudo o que o utilizador vê: português de Portugal, direto, sem enchimento.
 - **Propor antes de alterar o visual ou o fluxo** e esperar confirmação do Leston. Só avançar sem perguntar em correções de erros.
-- Repositório público: nunca pôr chaves de API, dados pessoais ou servidores. Tudo corre no browser e nada é enviado para fora.
-- A saída é **um único `dist/index.html`**, com fontes e bibliotecas embutidas. Sem CDN, sem pedidos de rede em execução.
+- Repositório público: nunca pôr chaves de API, tokens ou dados pessoais. Os segredos ficam só no Worker (`wrangler secret put`).
+- A saída é **um único `dist/index.html`**, com fontes e bibliotecas embutidas. Sem CDN. A página tem de funcionar sem internet; o que usa rede é um extra.
 - Unidades em **mm**. Eixos: X = largura (esquerda→direita), Y = profundidade (frente→trás), Z = altura (Z para cima, chão em Z=0).
-- A chave `oficina_perfil` no localStorage guarda o equipamento do utilizador. Não a renomear sem migrar os dados (senão o pai perde o que preencheu).
+- Chaves no localStorage (não renomear sem migrar os dados, senão o pai perde o que tem):
+  - `oficina_perfil`: equipamento
+  - `garagem_historico`: histórico de pedidos e projetos
+  - `garagem_sync`: código da cópia online e hora da última sincronização
 - Não commitar `node_modules/` nem `dist/` (já estão no `.gitignore`).
 
 ## Estrutura (`src/`)
 | Ficheiro | Faz |
 |---|---|
-| `main.js` | Interface: navegação, os 6 separadores, visualizadores 3D, ligação a tudo o resto |
+| `main.js` | Interface: navegação, os 7 separadores, visualizadores 3D, ligação a tudo o resto |
 | `template.html`, `style.css`, `icons.js` | Página, estilo (tons madeira/papel, fontes Zilla Slab e Atkinson Hyperlegible), ícones |
 | `geo.js` | Operações sobre malhas STL: furos, cortes, base, escala, espelho, rodar, estatísticas |
 | `shapes.js` | Peça 3D a partir de JSON do Claude (formas `add`/`sub`) e geradores simples (caixa, tampa, tubo, suporte em L, placa) |
 | `project.js` | Projeto de madeira: lê o JSON, cria a geometria, deteta peças soltas, calcula a lista de cortes |
 | `cuts.js` | Cálculo de cortes de tábuas (1D), por grupos |
 | `prompts.js` | Texto dos pedidos que o pai cola no Claude |
+| `historico.js` | Histórico (sem DOM): registar pedido, ligar projeto, apagar, juntar duas cópias, ficheiro de cópia |
+| `sync.js` | Cópia online: junta o histórico local com o do Worker e grava nos dois |
+| `config.js` | `WORKER_URL` (vazio = sem cópia online) |
+
+`worker/` é o Cloudflare Worker (código, `wrangler.toml`, instruções em `worker/LEIA-ME.md`). Não entra no `dist/`.
+
+## Rede
+A página só fala com o **Worker da Garagem** (`WORKER_URL`), e só para os usos desta tabela. Cada uso novo é decidido com o Leston e acrescentado aqui antes de se fazer.
+
+| Uso | Rota | O que sai do browser | Quando |
+|---|---|---|---|
+| Cópia online do histórico | `GET/PUT /historico` | o histórico (pedidos, textos, projetos) | só se o pai ligou o código no Equipamento |
+
+- O Worker guarda num repositório **privado** do GitHub. O token do GitHub e o `CODIGO` são segredos do Worker. A página só conhece o `CODIGO`, escrito pelo pai.
+- O Worker só aceita as origens em `ORIGENS`, exige o código e tem limite de pedidos.
+- Sem rede, ou com o Worker em baixo: tudo continua a funcionar e a guardar no computador; o Histórico mostra o erro em português.
+
+## Histórico
+- Entrada: `{id, criado, atualizado, modo, estado:"pedido"|"projeto", texto, pedido, nome, projeto}`. Entram os modos `madeira`, `plano`, `outro` (não os de Peça 3D).
+- "pedido" ao chegar ao passo 3; passa a "projeto" ao carregar em **Desenhar** (liga ao último pedido de madeira sem projeto). O exemplo não entra.
+- Apagar deixa `{id, atualizado, apagado:true}`, para a sincronização não ressuscitar o que foi apagado. Juntar: por `id`, ganha o `atualizado` mais recente.
+- Mudar o formato: atualizar `historico.js`, `test-historico.mjs` e manter a leitura das entradas antigas.
 
 ## Contrato entre os pedidos e os leitores (crítico)
 `prompts.js` ensina o Claude gratuito a produzir JSON, e `shapes.js` / `project.js` leem-no. Têm de mudar juntos.
@@ -45,10 +70,10 @@ App web estática (sem servidor) para marcenaria e impressão 3D. Publicada em h
 ## Como testar
 ```
 npm ci
-npm test         # lógica: geometria, cortes, projetos, pedidos
+npm test         # lógica: geometria, cortes, projetos, pedidos, histórico, Worker (GitHub simulado)
 npm run build    # gera dist/index.html
 ```
-Abrir `dist/index.html` no browser (duplo clique) e experimentar: Início; Pedir ao Claude (3 passos); Ver projeto → "Ver um exemplo"; Peça 3D → criar suporte em L, furar, cortar, guardar; Cortes.
+Abrir `dist/index.html` no browser (duplo clique) e experimentar: Início; Pedir ao Claude (3 passos); Ver projeto → "Ver um exemplo"; Peça 3D → criar suporte em L, furar, cortar, guardar; Cortes; Histórico (fazer um pedido de madeira, desenhar, "Ver em 3D", apagar, guardar/recuperar cópia).
 Os testes automáticos não cobrem a interface. Depois de mexer em UI, abrir a página e verificar à mão.
 
 ## Ramos e publicação
@@ -61,4 +86,5 @@ Os testes automáticos não cobrem a interface. Depois de mexer em UI, abrir a p
 - Peça 3D: caixa, cilindro, cone e esfera, juntos ou subtraídos. Sem formas orgânicas.
 - Peças com largura ≥ 250 mm contam como placas (contraplacado/MDF) e não entram no cálculo de tábuas.
 - O desenho só está certo se as contas do Claude estiverem certas. O aviso de peça solta apanha erros grandes, não pequenos.
-- Não há integração com a API do Claude: numa página pública a chave ficaria exposta.
+- Não há integração com a API do Claude. Se vier, passa pelo Worker (a chave nunca vai na página).
+- A cópia online só guarda o histórico; o equipamento só vai no ficheiro de cópia.

@@ -19,6 +19,7 @@
     <a href="#projeto" data-tab="projeto" data-i="projeto"><span>Ver projeto</span></a>
     <a href="#peca" data-tab="peca" data-i="peca"><span>Peça 3D</span></a>
     <a href="#cortes" data-tab="cortes" data-i="cortes"><span>Cortes</span></a>
+    <a href="#historico" data-tab="historico" data-i="historico"><span>Histórico</span></a>
     <a href="#perfil" data-tab="perfil" data-i="equip"><span>Equipamento</span></a>
   </nav>
 </header>
@@ -285,6 +286,20 @@
   </div>
 </section>
 
+<!-- ===== HISTÓRICO ===== -->
+<section id="tab-historico" class="tab">
+  <div class="hist-wrap">
+    <div class="cabeca"><h2>Histórico</h2><p class="muted">Os teus pedidos e projetos de madeira, do mais recente para o mais antigo. Ficam guardados neste computador.</p></div>
+    <div id="hist-sync" class="hist-sync" hidden></div>
+    <div id="hist-lista" class="hist-lista"></div>
+    <div class="bloco hist-copia">
+      <h3>Cópia de segurança</h3>
+      <p class="muted">Guarda num ficheiro o histórico e o equipamento. Serve para não perder nada se mudares de computador ou limpares o browser.</p>
+      <div class="row"><button class="sec" id="hist-exportar" data-i="guardar">Guardar uma cópia</button><label class="btn sec ficheiro-btn" data-i="abrirficheiro"><span>Recuperar uma cópia</span><input type="file" id="hist-importar" accept=".json,application/json"></label></div>
+    </div>
+  </div>
+</section>
+
 <!-- ===== EQUIPAMENTO ===== -->
 <section id="tab-perfil" class="tab">
   <div class="bloco estreito">
@@ -307,6 +322,14 @@
     <label for="p-notas">Outras notas (opcional)</label>
     <textarea id="p-notas" rows="3" data-k="notas" placeholder="Ex.: a oficina é pequena, não tenho aspirador..."></textarea>
     <p id="p-guardado" class="ok" hidden>Guardado ✓</p>
+    <div id="sync-bloco" hidden>
+      <h3>Cópia online</h3>
+      <p class="muted">Guarda o histórico também na internet, num sítio privado, para não se perder. Escreve o código de sincronização que o Leston te deu.</p>
+      <label for="sync-codigo">Código de sincronização</label>
+      <input type="text" id="sync-codigo" autocomplete="off" spellcheck="false">
+      <div class="row"><button id="sync-ligar">Ligar</button><button class="sec" id="sync-desligar">Desligar</button></div>
+      <p id="sync-estado"></p>
+    </div>
   </div>
 </section>
 
