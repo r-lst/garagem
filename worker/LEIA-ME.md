@@ -62,7 +62,13 @@ Não é preciso voltar a pôr os segredos: o `deploy` mantém os Secrets.
 
 ## Verificar depois de publicar
 
-Com a `ADMIN_KEY` (PowerShell, a origem tem de ser a da página):
+De ponta a ponta (pede a `ADMIN_KEY` sem a mostrar; grava, lê e apaga `historico/verificacao0.json`):
+
+```
+powershell -ExecutionPolicy Bypass -File worker\verificar.ps1
+```
+
+Só a lista, com a `ADMIN_KEY` (PowerShell, a origem tem de ser a da página):
 
 ```
 curl.exe -s -H "Origin: https://r-lst.github.io" -H "Authorization: Bearer <ADMIN_KEY>" https://api-github-garagem-dados.rmleston.workers.dev/lista
