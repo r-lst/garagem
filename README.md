@@ -1,6 +1,6 @@
 # Garagem
 
-Ferramentas para marcenaria e impressão 3D, a correr no browser. Funciona sem internet; a única coisa que sai do browser é a cópia online do histórico, se for ligada (ver abaixo).
+Ferramentas para marcenaria e impressão 3D, a correr no browser. Funciona sem internet; a única coisa que sai do browser é a cópia online do histórico e do equipamento, se for ligada (ver abaixo).
 
 **Usar:** https://r-lst.github.io/garagem/
 
@@ -17,7 +17,7 @@ Ferramentas para marcenaria e impressão 3D, a correr no browser. Funciona sem i
 
 - Equipamento, histórico e ficheiros STL ficam no browser. Os STL nunca saem do computador.
 - **Cópia de segurança:** no Histórico, "Guardar uma cópia" descarrega um ficheiro com o histórico e o equipamento; "Recuperar uma cópia" repõe-no.
-- **Cópia online (opcional):** se `src/config.js` tiver o endereço do Worker e o código for ligado no Equipamento, o histórico é guardado também num repositório privado do GitHub, através de um Cloudflare Worker (`worker/`, instruções em `worker/LEIA-ME.md`). A página nunca tem a chave do GitHub.
+- **Cópia online (opcional):** com uma chave ligada no aparelho (pelo link `#k=` ou no Equipamento), o histórico e o equipamento são guardados também num repositório privado do GitHub, através de um Cloudflare Worker (`worker/`, instruções em `worker/LEIA-ME.md`), e passam entre o computador e o telemóvel. A página nunca tem o token do GitHub. Os STL não vão.
 
 ## Desenvolvimento
 

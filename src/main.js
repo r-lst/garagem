@@ -10,7 +10,7 @@ import { parseLines, planGroups } from './cuts.js';
 import { buildPrompt, MODOS } from './prompts.js';
 import { icon, fillIcons } from './icons.js';
 import * as H from './historico.js';
-import { sincronizar, lerConfig, gravarConfig } from './sync.js';
+import { sincronizar, lerConfig, gravarConfig, chaveDoLink } from './sync.js';
 import { WORKER_URL } from './config.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -36,7 +36,8 @@ const PERFIL_DEFAULT = { impressora: 'Creality K1', vx: 220, vy: 220, vz: 250, b
 function loadPerfil() {
   try { return { ...PERFIL_DEFAULT, ...JSON.parse(localStorage.getItem('oficina_perfil') || '{}') }; } catch { return { ...PERFIL_DEFAULT }; }
 }
-function savePerfil() { try { localStorage.setItem('oficina_perfil', JSON.stringify(perfil)); } catch { /* sem armazenamento */ } }
+let aoGuardarPerfil = () => {}; // a cópia online liga-se aqui mais abaixo
+function savePerfil() { try { localStorage.setItem('oficina_perfil', JSON.stringify(perfil)); } catch { /* sem armazenamento */ } aoGuardarPerfil(); }
 const perfil = loadPerfil();
 let guardadoT;
 $$('[data-k]').forEach((el) => {
@@ -1037,20 +1038,33 @@ $('#hist-importar').addEventListener('change', async (ev) => {
   try {
     const imp = H.importar(await f.text());
     if (!confirm('Recuperar esta cópia? O equipamento passa a ser o da cópia, e os pedidos da cópia juntam-se aos que já estão aqui.')) return;
-    if (imp.perfil) {
-      Object.assign(perfil, PERFIL_DEFAULT, imp.perfil);
-      savePerfil();
-      $$('[data-k]').forEach((el) => (el.value = perfil[el.dataset.k] ?? ''));
-      matPeca.color.set(perfil.corPLA);
-      marcarCor(); drawBed(); updateInfo(); equipBanner();
-    }
+    if (imp.perfil) { aplicarPerfil(imp.perfil); savePerfil(); }
     setHist(H.juntar(hist, imp.historico));
     toast('Cópia recuperada.');
   } catch (e) { toast(e.message || String(e), true); }
 });
 
+function aplicarPerfil(p) {
+  for (const k of Object.keys(perfil)) delete perfil[k];
+  Object.assign(perfil, PERFIL_DEFAULT, p);
+  $$('[data-k]').forEach((el) => (el.value = perfil[el.dataset.k] ?? ''));
+  matPeca.color.set(perfil.corPLA);
+  marcarCor(); drawBed(); updateInfo(); equipBanner();
+}
+
 // ---------- cópia online (Worker) ----------
 const syncCfg = lerConfig(LS);
+// 0 = este aparelho nunca guardou equipamento (só recebe o online); 1 = já tinha antes da cópia online existir
+if (syncCfg.perfilAtualizado == null) { syncCfg.perfilAtualizado = LS.getItem('oficina_perfil') ? 1 : 0; gravarConfig(LS, syncCfg); }
+// link do telemóvel: .../garagem/#k=<chave>. Guarda a chave e tira-a do endereço.
+const doLink = chaveDoLink(location.hash);
+if (doLink) {
+  syncCfg.codigo = doLink.chave;
+  gravarConfig(LS, syncCfg);
+  window.history.replaceState(null, '', location.pathname + location.search + (doLink.resto ? '#' + doLink.resto : ''));
+  if (WORKER_URL) setTimeout(() => toast('Cópia online ligada.'), 400);
+}
+aoGuardarPerfil = () => { syncCfg.perfilAtualizado = Date.now(); gravarConfig(LS, syncCfg); agendarSync(); };
 let syncT = null, syncA = false, syncEstado = null;
 const syncLigado = () => !!(WORKER_URL && syncCfg.codigo);
 function agendarSync(ms = 1500) {
@@ -1064,10 +1078,17 @@ async function fazerSync() {
   syncA = true;
   mostrarSync();
   try {
-    const junta = await sincronizar(WORKER_URL, syncCfg.codigo, hist);
-    const novo = H.juntar(hist, junta); // o pai pode ter mudado algo durante o pedido
-    if (!H.iguais(novo, hist)) { hist = novo; H.guardar(LS, hist); renderHist(); }
-    if (!H.iguais(novo, junta)) agendarSync();
+    const perfilAntes = syncCfg.perfilAtualizado;
+    const r = await sincronizar(WORKER_URL, syncCfg.codigo, { hist, perfil: { ...perfil }, perfilAtualizado: perfilAntes, conhecidos: syncCfg.conhecidos });
+    const novo = H.juntar(r.hist, hist); // o pai pode ter mudado algo durante o pedido
+    if (JSON.stringify(novo) !== JSON.stringify(hist)) { hist = novo; H.guardar(LS, hist); renderHist(); }
+    if (!H.iguais(novo, r.hist)) agendarSync();
+    syncCfg.conhecidos = r.conhecidos;
+    if (r.perfil && syncCfg.perfilAtualizado === perfilAntes) {
+      aplicarPerfil(r.perfil);
+      try { localStorage.setItem('oficina_perfil', JSON.stringify(perfil)); } catch { /* sem armazenamento */ }
+      syncCfg.perfilAtualizado = r.perfilAtualizado;
+    } else if (syncCfg.perfilAtualizado !== perfilAntes) agendarSync();
     syncCfg.ultima = Date.now();
     gravarConfig(LS, syncCfg);
     syncEstado = { ok: true };
@@ -1080,10 +1101,10 @@ function mostrarSync() {
   const el = $('#hist-sync');
   const est = $('#sync-estado');
   let h = '', cls = '';
-  if (!syncLigado()) { el.hidden = true; est.className = 'muted'; est.textContent = 'Desligada. O histórico fica só neste computador.'; return; }
+  if (!syncLigado()) { el.hidden = true; est.className = 'muted'; est.textContent = 'Desligada. O histórico fica só neste aparelho.'; return; }
   if (syncA) h = 'A guardar a cópia online…';
   else if (syncEstado?.ok) { h = `✓ Cópia online em dia${syncCfg.ultima ? ' (' + quando(syncCfg.ultima) + ')' : ''}.`; cls = 'ok'; }
-  else if (syncEstado) { h = `✗ Cópia online: ${syncEstado.msg} O histórico continua guardado neste computador.`; cls = 'bad'; }
+  else if (syncEstado) { h = `✗ Cópia online: ${syncEstado.msg} O histórico continua guardado neste aparelho.`; cls = 'bad'; }
   else h = 'Cópia online ligada.';
   el.hidden = false;
   el.className = 'hist-sync ' + cls;
@@ -1101,7 +1122,7 @@ $('#sync-ligar').addEventListener('click', () => {
   fazerSync();
 });
 $('#sync-desligar').addEventListener('click', () => {
-  if (!syncCfg.codigo || !confirm('Desligar a cópia online neste computador? O que já lá está não é apagado.')) return;
+  if (!syncCfg.codigo || !confirm('Desligar a cópia online neste aparelho? O que já lá está não é apagado.')) return;
   delete syncCfg.codigo;
   gravarConfig(LS, syncCfg);
   syncEstado = null;

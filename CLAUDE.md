@@ -3,7 +3,7 @@
 App web estática para marcenaria e impressão 3D, com um Cloudflare Worker para o que precisa de rede (ver **Rede**). Publicada em https://r-lst.github.io/garagem/
 
 ## Para quem é
-- **Utilizador final:** o pai do Leston, 70 e tal anos, usa o Claude gratuito (conversa no browser, sem API). Precisa de letra grande, poucos campos por ecrã, nada técnico. Tem uma Creality K1 (PLA, volume 220×220×250 mm) e trabalha madeira na garagem do prédio.
+- **Utilizador final:** o pai do Leston, 70 e tal anos, usa o Claude gratuito (conversa no browser, sem API), no computador e no telemóvel. Precisa de letra grande, poucos campos por ecrã, nada técnico. Ecrãs novos têm de funcionar a 375 px de largura. Tem uma Creality K1 (PLA, volume 220×220×250 mm) e trabalha madeira na garagem do prédio.
 - **Quem mantém:** o Leston (administrador de sistemas; não programa de raiz). Explicar alterações em linguagem simples e dizer sempre o que mudou no ecrã.
 
 ## Regras do projeto
@@ -15,7 +15,7 @@ App web estática para marcenaria e impressão 3D, com um Cloudflare Worker para
 - Chaves no localStorage (não renomear sem migrar os dados, senão o pai perde o que tem):
   - `oficina_perfil`: equipamento
   - `garagem_historico`: histórico de pedidos e projetos
-  - `garagem_sync`: código da cópia online e hora da última sincronização
+  - `garagem_sync`: chave da cópia online, `perfilAtualizado`, `conhecidos` (sha de cada ficheiro online), hora da última sincronização
 - Não commitar `node_modules/` nem `dist/` (já estão no `.gitignore`).
 
 ## Estrutura (`src/`)
@@ -29,7 +29,7 @@ App web estática para marcenaria e impressão 3D, com um Cloudflare Worker para
 | `cuts.js` | Cálculo de cortes de tábuas (1D), por grupos |
 | `prompts.js` | Texto dos pedidos que o pai cola no Claude |
 | `historico.js` | Histórico (sem DOM): registar pedido, ligar projeto, apagar, juntar duas cópias, ficheiro de cópia |
-| `sync.js` | Cópia online: junta o histórico local com o do Worker e grava nos dois |
+| `sync.js` | Cópia online: lê do Worker o que mudou, junta com o local, grava o que é mais recente cá; chave do link `#k=` |
 | `config.js` | `WORKER_URL` (vazio = sem cópia online) |
 
 `worker/` é o Cloudflare Worker (código, `wrangler.toml`, instruções em `worker/LEIA-ME.md`). Não entra no `dist/`.
@@ -39,11 +39,13 @@ A página só fala com o **Worker da Garagem** (`WORKER_URL`), e só para os uso
 
 | Uso | Rota | O que sai do browser | Quando |
 |---|---|---|---|
-| Cópia online do histórico | `GET/PUT /historico` | o histórico (pedidos, textos, projetos) | só se o pai ligou o código no Equipamento |
+| Cópia online | `GET /lista`, `POST /ler`, `POST /gravar` | histórico (pedidos, textos, projetos) e equipamento | só com uma chave ligada no aparelho (link `#k=` ou Equipamento) |
 
-- O Worker guarda num repositório **privado** do GitHub. O token do GitHub e o `CODIGO` são segredos do Worker. A página só conhece o `CODIGO`, escrito pelo pai.
-- O Worker só aceita as origens em `ORIGENS`, exige o código e tem limite de pedidos.
-- Sem rede, ou com o Worker em baixo: tudo continua a funcionar e a guardar no computador; o Histórico mostra o erro em português.
+- Worker `api-github-garagem-dados`; guarda no repositório **privado** `r-lst/garagem-dados`: `perfil.json`, `historico/<id>.json`, `projetos/<id>.json` (mais tarde `fotos/<id-projeto>/<n>.jpg`). Detalhes em `worker/LEIA-ME.md`.
+- Segredos do Worker: `GITHUB_TOKEN`, `GITHUB_REPO`, `PAI_KEY`, `ADMIN_KEY`, `GEMINI_API_KEY`. A página só conhece a chave do aparelho. `PAI_KEY` lê e grava; `ADMIN_KEY` também apaga ficheiros.
+- Plano grátis: 50 pedidos ao GitHub por pedido ao Worker. Por isso a gravação é um só commit (5 pedidos) e a leitura vai em lotes de 40. Não trocar por um pedido por ficheiro.
+- Conflitos: por ficheiro, ganha o `atualizado` mais recente. Um aparelho que nunca guardou equipamento (`perfilAtualizado` 0) só recebe o equipamento, nunca envia os valores de origem.
+- Sem rede, ou com o Worker em baixo: tudo continua a funcionar e a guardar no aparelho; o Histórico mostra o erro em português.
 
 ## Histórico
 - Entrada: `{id, criado, atualizado, modo, estado:"pedido"|"projeto", texto, pedido, nome, projeto}`. Entram os modos `madeira`, `plano`, `outro` (não os de Peça 3D).
@@ -87,4 +89,5 @@ Os testes automáticos não cobrem a interface. Depois de mexer em UI, abrir a p
 - Peças com largura ≥ 250 mm contam como placas (contraplacado/MDF) e não entram no cálculo de tábuas.
 - O desenho só está certo se as contas do Claude estiverem certas. O aviso de peça solta apanha erros grandes, não pequenos.
 - Não há integração com a API do Claude. Se vier, passa pelo Worker (a chave nunca vai na página).
-- A cópia online só guarda o histórico; o equipamento só vai no ficheiro de cópia.
+- A cópia online não guarda ficheiros STL (decisão do Leston).
+- O token do GitHub expira a 21/10/2027.

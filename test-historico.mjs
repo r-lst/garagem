@@ -1,5 +1,5 @@
 import * as H from './src/historico.js';
-import { sincronizar } from './src/sync.js';
+import { chaveDoLink, paraFicheiros } from './src/sync.js';
 
 let fails = 0;
 const ok = (c, m) => { console.log((c ? '✓ ' : '✗ ') + m); if (!c) fails++; };
@@ -54,34 +54,13 @@ let msg = '';
 try { H.importar('{"x":1}'); } catch (e) { msg = e.message; }
 ok(msg === 'Este ficheiro não é uma cópia da Garagem.', 'erro: ' + msg);
 
-// sincronização contra um Worker simulado
-function workerFalso() {
-  const s = { conteudo: null, sha: null, n: 0, puts: 0 };
-  s.fetch = async (url, o) => {
-    if (o.headers.Authorization !== 'Bearer certo') return new Response('', { status: 401 });
-    if (o.method === 'GET') return Response.json({ conteudo: s.conteudo, sha: s.sha });
-    const b = JSON.parse(o.body);
-    if (b.sha !== s.sha) return new Response('', { status: 409 });
-    s.conteudo = b.conteudo; s.sha = 'v' + ++s.n; s.puts++;
-    return Response.json({ sha: s.sha });
-  };
-  return s;
-}
-const W = workerFalso();
-let S = await sincronizar('https://w.test/', 'certo', L, W.fetch);
-ok(W.conteudo.historico.length === L.length && S.length === L.length, 'primeira sincronização grava tudo');
-const outro = H.registarPedido([], { modo: 'outro', texto: 'noutro computador', pedido: '' }, 3000).lista;
-S = await sincronizar('https://w.test', 'certo', outro, W.fetch);
-ok(S.length === L.length + 1, 'junta o que está online com o local');
-const puts = W.puts;
-await sincronizar('https://w.test', 'certo', S, W.fetch);
-ok(W.puts === puts, 'sem mudanças não grava');
-msg = '';
-try { await sincronizar('https://w.test', 'errado', L, W.fetch); } catch (e) { msg = e.message; }
-ok(msg === 'O código de sincronização está errado.', 'erro: ' + msg);
-msg = '';
-try { await sincronizar('https://w.test', 'certo', L, async () => { throw new TypeError('x'); }); } catch (e) { msg = e.message; }
-ok(msg === 'Sem ligação à internet.', 'erro: ' + msg);
+// link do telemóvel e ficheiros
+ok(chaveDoLink('#k=abc123')?.chave === 'abc123' && chaveDoLink('#k=abc123').resto === '', 'chave no link #k=');
+ok(chaveDoLink('#historico&k=abc')?.resto === 'historico', 'chave no link com separador');
+ok(chaveDoLink('#historico') === null && chaveDoLink('') === null, 'link sem chave');
+const F = paraFicheiros(H.apagar(L, L[2].id, 2100));
+ok(F[`historico/${id1}.json`] && !('projeto' in F[`historico/${id1}.json`]) && F[`projetos/${id1}.json`].projeto.nome === 'Bancada', 'projeto vai em ficheiro à parte');
+ok(F[`historico/${L[2].id}.json`].apagado && !F[`projetos/${L[2].id}.json`], 'apagado: só a marca');
 
 console.log(fails ? `\n${fails} falha(s)` : '\nTudo OK');
 process.exit(fails ? 1 : 0);

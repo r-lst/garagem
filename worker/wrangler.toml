@@ -1,14 +1,10 @@
-name = "garagem"
+name = "api-github-garagem-dados"
 main = "index.js"
 compatibility_date = "2025-09-01"
 
-[vars]
-# Repositório PRIVADO onde fica o histórico ("dono/nome")
-REPO = "r-lst/MUDAR-PARA-O-REPO-DE-DADOS"
-RAMO = "main"
-FICHEIRO = "historico.json"
-# Páginas que podem usar este Worker. Para testar o dist/index.html aberto com duplo clique, juntar ",null".
-ORIGENS = "https://r-lst.github.io"
+# Sem [vars]: tudo o que é configuração está em Secrets (GITHUB_TOKEN, GITHUB_REPO, PAI_KEY, ADMIN_KEY),
+# porque um deploy com o wrangler apaga as variáveis que não estejam neste ficheiro.
+# Opcionais, também como Secret: GITHUB_RAMO (por omissão main), ORIGENS (por omissão https://r-lst.github.io).
 
 # Limite: 30 pedidos por minuto por endereço IP
 [[ratelimits]]
