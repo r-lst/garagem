@@ -1,6 +1,7 @@
 // Histórico de pedidos e projetos. Lógica pura (sem DOM): guardar, ligar o projeto ao pedido, juntar cópias.
 // Cada entrada: {id, criado, atualizado, modo, estado:'pedido'|'projeto'|'resolvida', texto, pedido, nome, projeto, area, resposta}
-// 'resolvida' e 'resposta' só nas reparações.
+// 'resolvida' só nas reparações; 'resposta' nas reparações e nos projetos de madeira;
+// oficina: {cortar:{chave:true}, comprar:{chave:true}} = o que foi riscado no modo oficina.
 // Apagar deixa só {id, atualizado, apagado:true}, para a sincronização não ressuscitar o que foi apagado.
 
 export const CHAVE = 'garagem_historico';
@@ -79,6 +80,17 @@ export function marcarResolvida(lista, id, resolvida = true, agora = Date.now())
 export function guardarResposta(lista, id, texto, agora = Date.now()) {
   const t = String(texto || '').trim();
   return lista.map((e) => (e.id === id && !e.apagado ? { ...e, resposta: t, atualizado: agora } : e));
+}
+
+/** Modo oficina: riscar (ou desfazer) uma linha. tipo 'cortar' ou 'comprar'; fica em e.oficina[tipo][chave]. */
+export function marcarOficina(lista, id, tipo, chave, feito = true, agora = Date.now()) {
+  return lista.map((e) => {
+    if (e.id !== id || e.apagado) return e;
+    const of = { cortar: {}, comprar: {}, ...(e.oficina || {}) };
+    const t = { ...(of[tipo] || {}) };
+    if (feito) t[chave] = true; else delete t[chave];
+    return { ...e, oficina: { ...of, [tipo]: t }, atualizado: agora };
+  });
 }
 
 export function apagar(lista, id, agora = Date.now()) {

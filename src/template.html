@@ -27,6 +27,7 @@
 
 <!-- ===== INÍCIO ===== -->
 <section id="tab-inicio" class="tab">
+  <div class="continuar" id="continuar"></div>
   <div class="hero">
     <div class="hero-txt">
       <p class="sobre">Marcenaria · Impressão 3D</p>
@@ -309,6 +310,17 @@
   </div>
 </section>
 
+<!-- ===== MODO OFICINA ===== -->
+<section id="tab-oficina" class="tab">
+  <div class="oficina">
+    <a class="voltar-link" href="#historico" data-i="voltar">Projetos</a>
+    <h2 id="of-nome"></h2>
+    <p class="of-sub" id="of-sub"></p>
+    <div class="seg of-seg" id="of-seg"><button data-v="cortar">Cortar</button><button data-v="comprar">Comprar</button><button data-v="montar">Montar</button></div>
+    <div id="of-corpo"></div>
+  </div>
+</section>
+
 <!-- ===== EQUIPAMENTO ===== -->
 <section id="tab-perfil" class="tab">
   <div class="bloco estreito">
@@ -344,6 +356,22 @@
 
 </main>
 <div id="folha" class="folha" aria-hidden="true"></div>
+<nav class="barra" id="barra" aria-label="Menu">
+  <a href="#inicio" data-tab="inicio" data-i="inicio"><span>Início</span></a>
+  <a href="#historico" data-tab="historico" data-i="historico"><span>Projetos</span></a>
+  <a href="#pedir" data-tab="pedir" data-i="pedir"><span>Pedir</span></a>
+  <a href="#cortes" data-tab="cortes" data-i="cortes"><span>Cortes</span></a>
+  <button type="button" id="mais-abrir" data-i="mais"><span>Mais</span></button>
+</nav>
+<div class="mais" id="mais" hidden>
+  <div class="mais-folha">
+    <h3>Mais</h3>
+    <a class="btn sec grande" href="#projeto" data-i="projeto">Ver projeto</a>
+    <a class="btn sec grande" href="#peca" data-i="peca"><span>Peça 3D <small>é mais fácil no computador</small></span></a>
+    <a class="btn sec grande" href="#perfil" data-i="equip">Equipamento</a>
+    <button type="button" class="sec" id="mais-fechar">Fechar</button>
+  </div>
+</div>
 <div id="toast" class="toast"></div>
 <script>/*JS*/</script>
 </body>

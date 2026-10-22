@@ -9,6 +9,7 @@ import { GERADORES, buildSpec, extractJSON } from './shapes.js';
 import { parseLines, planGroups } from './cuts.js';
 import { buildPrompt, MODOS, AREAS_REPARACAO } from './prompts.js';
 import { folhaCortes } from './folha.js';
+import { listasOficina, progresso } from './oficina.js';
 import { icon, fillIcons } from './icons.js';
 import * as H from './historico.js';
 import { sincronizar, lerConfig, gravarConfig, chaveDoLink } from './sync.js';
@@ -61,21 +62,32 @@ function equipBanner() {
 equipBanner();
 
 // ================= Navegação =================
-const TABS = ['inicio', 'pedir', 'projeto', 'peca', 'cortes', 'historico', 'perfil'];
+const TABS = ['inicio', 'pedir', 'projeto', 'peca', 'cortes', 'historico', 'perfil', 'oficina'];
+const telemovel = () => window.matchMedia('(max-width: 700px)').matches;
 let tabAtual = '';
+let oficinaId = null; // projeto aberto no modo oficina (#oficina=<id>)
 function showTab(name) {
+  if (name.startsWith('oficina=')) { oficinaId = name.slice(8); name = 'oficina'; }
   if (!TABS.includes(name)) name = 'inicio';
+  if (name === 'oficina' && !hist.some((e) => e.id === oficinaId && e.projeto && !e.apagado)) name = 'historico';
   tabAtual = name;
-  $$('#tabs a').forEach((b) => b.classList.toggle('on', b.dataset.tab === name));
+  const marca = name === 'oficina' ? 'historico' : name;
+  $$('#tabs a, #barra a').forEach((b) => b.classList.toggle('on', b.dataset.tab === marca));
   $$('.tab').forEach((t) => t.classList.toggle('on', t.id === 'tab-' + name));
+  $('#mais').hidden = true;
   requestAnimationFrame(() => {
     if (name === 'peca') { PV.resize(); if (geo && !fittedOnce) fitPeca(); }
     if (name === 'projeto') { JV.resize(); if (projItems && !projFitted) setView('3d'); }
-    if (name === 'inicio') heroStart(); else heroStop();
+    if (name === 'inicio' && !telemovel()) heroStart(); else heroStop();
   });
   if (name === 'historico') { renderHist(); agendarSync(100); }
+  if (name === 'inicio') renderContinuar();
+  if (name === 'oficina') { renderOficina(); ligarEcra(); } else desligarEcra();
   window.scrollTo(0, 0);
 }
+$('#mais-abrir').addEventListener('click', () => { $('#mais').hidden = false; });
+$('#mais-fechar').addEventListener('click', () => { $('#mais').hidden = true; });
+$('#mais').addEventListener('click', (e) => { if (e.target === $('#mais') || e.target.closest('a')) $('#mais').hidden = true; });
 window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
 const goto = (name) => { if (location.hash === '#' + name) showTab(name); else location.hash = name; };
 
@@ -1103,7 +1115,8 @@ function setHist(lista) {
   renderHist();
   agendarSync();
 }
-let editarResposta = null; // id da reparação cuja resposta está a ser escrita
+let editarResposta = null; // id da reparação ou projeto cuja resposta está a ser escrita
+let abrirResposta = null; // id cuja resposta abre (e para onde se desce) no próximo desenho do Histórico
 function renderHist() {
   const lista = H.ordenados(hist);
   // a sincronização pode redesenhar enquanto o pai escreve: guardar o rascunho
@@ -1114,6 +1127,8 @@ function renderHist() {
   }
   $('#hist-lista').innerHTML = lista.map((e) => {
     const rep = e.modo === 'reparacao';
+    const comResposta = rep || e.modo === 'madeira';
+    const prog = e.estado === 'projeto' ? progressoCortes(e) : null;
     const pronto = e.estado === 'projeto' || e.estado === 'resolvida';
     const estado = e.estado === 'projeto' ? 'Projeto pronto' : e.estado === 'resolvida' ? 'Resolvida' : 'Pedido feito';
     const texto = String(e.texto || '').trim();
@@ -1121,20 +1136,23 @@ function renderHist() {
     const editar = editarResposta === e.id;
     return `<article class="hist-item" data-id="${esc(e.id)}">
       <div class="hist-top"><span class="ci">${icon(MODO_INFO[e.modo]?.i || 'outro')}</span>
-        <div class="hist-tit"><h3>${esc(H.titulo(e, NOMES_MODO))}</h3><p class="muted">${esc(quando(e.criado))} · ${esc(NOMES_MODO[e.modo] || '')}${e.area ? ' · ' + esc(e.area) : ''}</p></div>
+        <div class="hist-tit"><h3>${esc(H.titulo(e, NOMES_MODO))}</h3><p class="muted">${esc(quando(e.criado))} · ${esc(NOMES_MODO[e.modo] || '')}${e.area ? ' · ' + esc(e.area) : ''}${prog && prog.feitos ? ` · ${prog.feitos} de ${prog.total} cortes feitos` : ''}</p></div>
         <span class="estado ${pronto ? 'pronto' : ''}">${pronto ? icon('certo') : ''}${estado}</span></div>
       ${texto && (e.estado === 'projeto' || texto.length > 60) ? `<p class="hist-texto">«${esc(texto)}»</p>` : ''}
-      ${rep && resposta && !editar ? `<details class="hist-resposta"><summary>Resposta do Claude</summary><div>${esc(resposta)}</div></details>` : ''}
+      ${comResposta && resposta && !editar ? `<details class="hist-resposta"${abrirResposta === e.id ? ' open' : ''}><summary>Resposta do Claude</summary><div>${esc(resposta)}</div></details>` : ''}
       ${editar ? `<label class="q-peq" for="resp-${esc(e.id)}">Cola aqui a resposta do Claude</label><textarea id="resp-${esc(e.id)}" rows="8">${esc(rascunho ?? resposta)}</textarea>
         <div class="row"><button data-acao="resp-guardar">${icon('guardar')}Guardar a resposta</button><button class="sec" data-acao="resp-cancelar">Cancelar</button></div>` : `<div class="row">
-        ${e.estado === 'projeto' ? `<button data-acao="ver">${icon('projeto')}Ver em 3D</button>` : ''}
+        ${e.estado === 'projeto' ? `<button data-acao="oficina">${icon('oficina')}Abrir na oficina</button><button class="sec so-pc" data-acao="ver">${icon('projeto')}Ver em 3D</button>` : ''}
         ${e.pedido ? `<button class="sec" data-acao="copiar">${icon('copiar')}Copiar o pedido</button>` : ''}
-        ${rep ? `<button class="sec" data-acao="resp-editar">${icon('colar')}${resposta ? 'Mudar a resposta' : 'Guardar a resposta'}</button>` : ''}
+        ${comResposta ? `<button class="sec" data-acao="resp-editar">${icon('colar')}${resposta ? 'Mudar a resposta' : 'Guardar a resposta'}</button>` : ''}
         ${rep ? `<button class="sec" data-acao="resolvida">${icon('certo')}${e.estado === 'resolvida' ? 'Voltar a abrir' : 'Marcar como resolvida'}</button>` : ''}
         <button class="sec" data-acao="apagar">${icon('apagar')}Apagar</button>
       </div>`}</article>`;
   }).join('');
   if (editarResposta && rascunho == null) $(`#resp-${editarResposta}`)?.focus();
+  if (abrirResposta) { $(`.hist-item[data-id="${abrirResposta}"]`)?.scrollIntoView({ block: 'start' }); abrirResposta = null; }
+  renderContinuar();
+  if (tabAtual === 'oficina') renderOficina();
 }
 async function copiarTexto(txt) {
   try { await navigator.clipboard.writeText(txt); return true; } catch { /* método antigo */ }
@@ -1153,7 +1171,9 @@ $('#hist-lista').addEventListener('click', async (ev) => {
   if (!b) return;
   const e = hist.find((x) => x.id === b.closest('[data-id]').dataset.id);
   if (!e) return;
-  if (b.dataset.acao === 'ver') {
+  if (b.dataset.acao === 'oficina') {
+    location.hash = 'oficina=' + e.id;
+  } else if (b.dataset.acao === 'ver') {
     $('#proj-json').value = JSON.stringify(e.projeto, null, 1);
     goto('projeto');
     later(() => readProj(false));
@@ -1181,6 +1201,102 @@ $('#hist-lista').addEventListener('click', async (ev) => {
     setHist(H.apagar(hist, e.id));
     toast('Apagado.');
   }
+});
+
+// ---------- modo oficina ----------
+const listasCache = new Map();
+/** Listas do modo oficina de um projeto, com o comprimento de tábua, serra e aparo do separador Cortes. */
+function listasDe(e) {
+  const opts = { board: (val($('#t-comp')) || 2400) * Number($('#t-unid').value), kerf: val($('#t-serra')) || 0, trim: val($('#t-aparo')) || 0 };
+  const k = JSON.stringify([e.projeto, opts]);
+  if (!listasCache.has(k)) {
+    try { listasCache.set(k, listasOficina(e.projeto, opts)); } catch { listasCache.set(k, null); }
+  }
+  return listasCache.get(k);
+}
+function progressoCortes(e) {
+  const l = listasDe(e);
+  return l ? progresso(l.cortar.flatMap((g) => g.itens), e.oficina?.cortar) : null;
+}
+let ofVista = 'cortar';
+function linhaOficina(tipo, chave, feito, nome, sub, med, medSub) {
+  return `<button class="of-linha${feito ? ' feito' : ''}" data-tipo="${tipo}" data-chave="${esc(chave)}" aria-pressed="${feito}">
+    <span class="of-cx">${feito ? icon('certo') : ''}</span>
+    <span class="of-nome">${esc(nome)}${sub ? `<small>${esc(sub)}</small>` : ''}</span>
+    <span class="of-med">${esc(med)}${medSub ? `<small>${esc(medSub)}</small>` : ''}</span></button>`;
+}
+function renderOficina() {
+  const e = hist.find((x) => x.id === oficinaId && !x.apagado);
+  const l = e && listasDe(e);
+  if (!l) { $('#of-nome').textContent = 'Projeto'; $('#of-corpo').innerHTML = '<p class="erro on">Não consegui ler este projeto.</p>'; return; }
+  const rc = e.oficina?.cortar || {}, rb = e.oficina?.comprar || {};
+  const pc = progresso(l.cortar.flatMap((g) => g.itens), rc), pb = progresso(l.comprar, rb);
+  $('#of-nome').textContent = l.nome;
+  $('#of-sub').textContent = [l.medidas.map((v) => fmt(v, 0)).join(' × ') + ' mm', l.madeira, wake ? 'ecrã sempre ligado' : ''].filter(Boolean).join(' · ');
+  const nomes = { cortar: `Cortar ${pc.feitos}/${pc.total}`, comprar: `Comprar ${pb.feitos}/${pb.total}`, montar: 'Montar' };
+  $$('#of-seg button').forEach((b) => { b.classList.toggle('on', b.dataset.v === ofVista); b.textContent = nomes[b.dataset.v]; });
+  let h = '';
+  if (ofVista === 'cortar') {
+    for (const g of l.cortar) {
+      h += `<h3 class="of-grupo">${esc(g.grupo)}</h3>`;
+      // o que já foi cortado desce para o fim do grupo
+      for (const i of [...g.itens].sort((a, b) => (rc[a.chave] ? 1 : 0) - (rc[b.chave] ? 1 : 0))) h += linhaOficina('cortar', i.chave, !!rc[i.chave], i.nome, i.recorte ? 'recortar' : '', i.medida, `× ${i.qty}`);
+    }
+  } else if (ofVista === 'comprar') {
+    for (const i of [...l.comprar].sort((a, b) => (rb[a.chave] ? 1 : 0) - (rb[b.chave] ? 1 : 0))) h += linhaOficina('comprar', i.chave, !!rb[i.chave], i.texto, '', i.qtd, '');
+  } else {
+    h = e.resposta ? `<div class="bloco of-montar">${esc(e.resposta)}</div>`
+      : `<div class="bloco of-vazio"><p>Ainda não guardaste a resposta do Claude com os passos de montagem.</p><button data-acao-of="guardar-resposta">${icon('colar')}Guardar a resposta</button></div>`;
+  }
+  $('#of-corpo').innerHTML = h;
+}
+$('#of-seg').addEventListener('click', (ev) => { const b = ev.target.closest('[data-v]'); if (b) { ofVista = b.dataset.v; renderOficina(); } });
+$('#of-corpo').addEventListener('click', (ev) => {
+  const b = ev.target.closest('.of-linha');
+  if (b) {
+    const e = hist.find((x) => x.id === oficinaId);
+    const feito = !(e.oficina?.[b.dataset.tipo] || {})[b.dataset.chave];
+    setHist(H.marcarOficina(hist, oficinaId, b.dataset.tipo, b.dataset.chave, feito));
+    return;
+  }
+  if (ev.target.closest('[data-acao-of="guardar-resposta"]')) { editarResposta = oficinaId; abrirResposta = oficinaId; goto('historico'); }
+});
+// ecrã sempre ligado no modo oficina (se o browser deixar)
+let wake = null;
+async function ligarEcra() {
+  if (wake || !navigator.wakeLock) return;
+  try {
+    wake = await navigator.wakeLock.request('screen');
+    wake.addEventListener('release', () => { wake = null; if (tabAtual === 'oficina') renderOficina(); });
+    if (tabAtual === 'oficina') renderOficina();
+  } catch { wake = null; }
+}
+function desligarEcra() { if (wake) { wake.release().catch(() => {}); wake = null; } }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && tabAtual === 'oficina') ligarEcra(); });
+
+// ---------- Início no telemóvel: Continuar ----------
+function renderContinuar() {
+  const vis = H.ordenados(hist);
+  const proj = vis.filter((e) => e.estado === 'projeto').sort((a, b) => b.atualizado - a.atualizado)
+    .find((e) => { const p = progressoCortes(e); return p && p.feitos < p.total; });
+  const reps = vis.filter((e) => e.modo === 'reparacao' && e.estado !== 'resolvida').slice(0, 2);
+  let h = proj || reps.length ? '<h2>Continuar</h2>' : '<h2>O que vamos fazer?</h2>';
+  if (proj) {
+    const p = progressoCortes(proj);
+    h += `<div class="cont-cartao"><h3>${icon('madeira')}${esc(H.titulo(proj, NOMES_MODO))}</h3><p>${p.feitos} de ${p.total} cortes feitos</p><a class="btn grande" href="#oficina=${esc(proj.id)}">${icon('oficina')}Abrir na oficina</a></div>`;
+  }
+  for (const r of reps) {
+    h += `<div class="cont-cartao"><h3>${icon('reparar')}${esc(H.titulo(r, NOMES_MODO))}</h3><p>Por resolver${r.area ? ' · ' + esc(r.area) : ''}</p><button class="sec grande" data-cont="${esc(r.id)}">${r.resposta ? 'Ver a resposta' : 'Abrir'}</button></div>`;
+  }
+  h += `<div class="cont-botoes"><a class="btn grande" href="#pedir">${icon('pedir')}Fazer um pedido</a><button class="sec grande" data-cont="reparar">${icon('reparar')}Reparar</button></div>`;
+  $('#continuar').innerHTML = h;
+}
+$('#continuar').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-cont]');
+  if (!b) return;
+  if (b.dataset.cont === 'reparar') { goto('pedir'); $('[data-modo="reparacao"]').click(); return; }
+  abrirResposta = b.dataset.cont;
+  goto('historico');
 });
 
 $('#hist-exportar').addEventListener('click', () => {

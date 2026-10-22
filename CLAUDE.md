@@ -21,12 +21,13 @@ App web estática para marcenaria e impressão 3D, com um Cloudflare Worker para
 ## Estrutura (`src/`)
 | Ficheiro | Faz |
 |---|---|
-| `main.js` | Interface: navegação, os 7 separadores, visualizadores 3D, ligação a tudo o resto |
+| `main.js` | Interface: navegação (menu de cima; barra em baixo no telemóvel), os separadores, modo oficina, visualizadores 3D, ligação a tudo o resto |
 | `template.html`, `style.css`, `icons.js` | Página, estilo (tons madeira/papel, fontes Zilla Slab e Atkinson Hyperlegible), ícones |
 | `geo.js` | Operações sobre malhas STL: furos, cortes, base, escala, espelho, rodar, estatísticas, caber no volume de impressão |
 | `shapes.js` | Peça 3D a partir de JSON do Claude (formas `add`/`sub`) e geradores simples (caixa, tampa, tubo, suporte em L, placa) |
 | `project.js` | Projeto de madeira: lê o JSON, cria a geometria, deteta peças soltas, calcula a lista de cortes |
 | `cuts.js` | Cálculo de cortes de tábuas (1D), por grupos |
+| `oficina.js` | Modo oficina (sem DOM): listas Cortar e Comprar de um projeto, com chaves estáveis para riscar |
 | `folha.js` | Folha de cortes para imprimir (sem DOM, devolve HTML): comprar, cortar, como cortar cada tábua |
 | `prompts.js` | Texto dos pedidos que o pai cola no Claude |
 | `historico.js` | Histórico (sem DOM): registar pedido, ligar projeto, apagar, juntar duas cópias, ficheiro de cópia |
@@ -49,10 +50,18 @@ A página só fala com o **Worker da Garagem** (`WORKER_URL`), e só para os uso
 - Sem rede, ou com o Worker em baixo: tudo continua a funcionar e a guardar no aparelho; o Histórico mostra o erro em português.
 
 ## Histórico
-- Entrada: `{id, criado, atualizado, modo, estado:"pedido"|"projeto"|"resolvida", texto, pedido, nome, projeto, area, resposta}`. Entram os modos `madeira`, `reparacao`, `plano`, `outro` (não os de Peça 3D). `resolvida`, `area` e `resposta` só nas reparações.
+- Entrada: `{id, criado, atualizado, modo, estado:"pedido"|"projeto"|"resolvida", texto, pedido, nome, projeto, area, resposta, oficina}`. Entram os modos `madeira`, `reparacao`, `plano`, `outro` (não os de Peça 3D). `resolvida` e `area` só nas reparações; `resposta` nas reparações e nos projetos de madeira; `oficina: {cortar:{chave:true}, comprar:{chave:true}}` = o que foi riscado no modo oficina.
 - "pedido" ao chegar ao passo 3; passa a "projeto" ao carregar em **Desenhar** (liga ao último pedido de madeira sem projeto). O exemplo não entra.
 - Apagar deixa `{id, atualizado, apagado:true}`, para a sincronização não ressuscitar o que foi apagado. Juntar: por `id`, ganha o `atualizado` mais recente.
 - Mudar o formato: atualizar `historico.js`, `test-historico.mjs` e manter a leitura das entradas antigas.
+
+## Telemóvel (até 700 px de largura)
+- O menu de cima dá lugar a uma barra em baixo: Início, Projetos (= Histórico), Pedir, Cortes, Mais (Ver projeto, Peça 3D, Equipamento). Decide-se pela largura, não pelo aparelho.
+- Início mostra "Continuar": o projeto mais recente com cortes por fazer e até 2 reparações por resolver. A apresentação e a mesa 3D só no computador.
+- **Modo oficina** (`#oficina=<id>`, também no computador): Cortar / Comprar / Montar. Tocar numa linha risca-a (fica em `oficina` na entrada e vai na cópia online); o riscado desce para o fim do grupo. Montar mostra a `resposta` guardada. Ecrã sempre ligado (Wake Lock) enquanto está aberto.
+- As chaves das linhas (`oficina.js`) não dependem do comprimento da tábua: mudar a tábua em Cortes não perde o que foi riscado. Não as mudar sem migrar.
+- Sem modo offline: há sempre internet na garagem (decisão do Leston). Mantém-se o ficheiro único.
+- `.so-pc` esconde coisas no telemóvel (ex.: "Ver em 3D" no Histórico). As regras do menu de cima são `#tabs`, não `nav` (a barra também é um `nav`).
 
 ## Reparações
 - Tipo `reparacao` no Pedir ao Claude (e cartão no Início). Passo 2: área opcional (`AREAS_REPARACAO`) e "O que se passa?". Passo 3: lembra de juntar fotos na conversa do Claude. A página não vê nem envia as fotos.
@@ -94,7 +103,7 @@ npm ci
 npm test         # lógica: geometria, cortes, projetos, pedidos, histórico, Worker (GitHub simulado), folha de cortes
 npm run build    # gera dist/index.html
 ```
-Abrir `dist/index.html` no browser (duplo clique) e experimentar: Início; Pedir ao Claude (3 passos); Ver projeto → "Ver um exemplo"; Peça 3D → criar suporte em L, furar, cortar, guardar; criar uma placa de 280 × 40 (deve rodar para a diagonal e avisar) e uma de 400 × 300 (deve dizer que excede); Cortes; Ver projeto → "Imprimir folha de cortes" (pré-visualização de impressão: A4, preto e branco, 2 páginas no exemplo); Histórico (fazer um pedido de madeira, desenhar, "Ver em 3D", apagar, guardar/recuperar cópia).
+Abrir `dist/index.html` no browser (duplo clique) e experimentar: Início; Pedir ao Claude (3 passos); Ver projeto → "Ver um exemplo"; Peça 3D → criar suporte em L, furar, cortar, guardar; criar uma placa de 280 × 40 (deve rodar para a diagonal e avisar) e uma de 400 × 300 (deve dizer que excede); Cortes; Ver projeto → "Imprimir folha de cortes" (pré-visualização de impressão: A4, preto e branco, 2 páginas no exemplo); Histórico (fazer um pedido de madeira, desenhar, "Ver em 3D", apagar, guardar/recuperar cópia); a 375 px: barra em baixo, Início → Continuar → Abrir na oficina, riscar um corte, Montar → Guardar a resposta, Mais.
 Os testes automáticos não cobrem a interface. Depois de mexer em UI, abrir a página e verificar à mão.
 
 ## Ramos e publicação

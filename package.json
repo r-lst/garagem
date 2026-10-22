@@ -5,7 +5,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node test.mjs && node test-projeto.mjs && node test-historico.mjs && node test-worker.mjs && node test-folha.mjs",
+    "test": "node test.mjs && node test-projeto.mjs && node test-historico.mjs && node test-worker.mjs && node test-folha.mjs && node test-oficina.mjs",
     "build": "node build.mjs"
   },
   "engines": { "node": ">=20" },
