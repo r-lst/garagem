@@ -23,7 +23,7 @@ App web estática para marcenaria e impressão 3D, com um Cloudflare Worker para
 |---|---|
 | `main.js` | Interface: navegação, os 7 separadores, visualizadores 3D, ligação a tudo o resto |
 | `template.html`, `style.css`, `icons.js` | Página, estilo (tons madeira/papel, fontes Zilla Slab e Atkinson Hyperlegible), ícones |
-| `geo.js` | Operações sobre malhas STL: furos, cortes, base, escala, espelho, rodar, estatísticas |
+| `geo.js` | Operações sobre malhas STL: furos, cortes, base, escala, espelho, rodar, estatísticas, caber no volume de impressão |
 | `shapes.js` | Peça 3D a partir de JSON do Claude (formas `add`/`sub`) e geradores simples (caixa, tampa, tubo, suporte em L, placa) |
 | `project.js` | Projeto de madeira: lê o JSON, cria a geometria, deteta peças soltas, calcula a lista de cortes |
 | `cuts.js` | Cálculo de cortes de tábuas (1D), por grupos |
@@ -70,6 +70,12 @@ A página só fala com o **Worker da Garagem** (`WORKER_URL`), e só para os uso
 - Imprime só `#folha` (`body.a-imprimir`, tirado no `afterprint`). Estilo só dentro de `@media print`, em pt; preto e branco; a sobra tracejada usa `print-color-adjust: exact`.
 - Para ver o resultado sem impressora: Edge sem janela com `--print-to-pdf` sobre uma cópia do `dist/index.html` que carrega no botão.
 
+## Caber na impressora (Peça 3D)
+- Limites: os do Equipamento (`vx`, `vy`, `vz`; por omissão a K1, 220 × 220 × 250 mm). Folga de 0,01 mm.
+- `G.rodarParaCaber` tenta, por esta ordem: rodar 90° na mesa → diagonal da mesa (estas duas mantêm a face de baixo) → virar para outra face → virada e na diagonal. Não trocar a ordem: uma barra fina ficava de pé.
+- Roda **sozinha só quando a peça entra** (abrir STL, criar, importar do Claude) e avisa (faixa acima do desenho com Desfazer, e mensagem em baixo, porque no telemóvel o pai está no formulário). Depois de alterações, só avisa, com o botão **Rodar para caber**. Sem posição possível: "A peça excede o tamanho". Nunca corta sozinha.
+- O Guardar avisa mas guarda sempre (decisão do Leston).
+
 ## Geometria: cuidados
 - Booleanas com `three-bvh-csg`. O resultado passa por `clean()` e `repairTJunctions()`; sem isto saem junções em T e a malha parece aberta.
 - `stats().closed` usa o balanço de área (tolerante a ruído de ~1e-4 mm das booleanas). `strictClosed` é o rigoroso. Não simplificar sem correr `npm test`: já falhou por isto.
@@ -81,7 +87,7 @@ npm ci
 npm test         # lógica: geometria, cortes, projetos, pedidos, histórico, Worker (GitHub simulado), folha de cortes
 npm run build    # gera dist/index.html
 ```
-Abrir `dist/index.html` no browser (duplo clique) e experimentar: Início; Pedir ao Claude (3 passos); Ver projeto → "Ver um exemplo"; Peça 3D → criar suporte em L, furar, cortar, guardar; Cortes; Ver projeto → "Imprimir folha de cortes" (pré-visualização de impressão: A4, preto e branco, 2 páginas no exemplo); Histórico (fazer um pedido de madeira, desenhar, "Ver em 3D", apagar, guardar/recuperar cópia).
+Abrir `dist/index.html` no browser (duplo clique) e experimentar: Início; Pedir ao Claude (3 passos); Ver projeto → "Ver um exemplo"; Peça 3D → criar suporte em L, furar, cortar, guardar; criar uma placa de 280 × 40 (deve rodar para a diagonal e avisar) e uma de 400 × 300 (deve dizer que excede); Cortes; Ver projeto → "Imprimir folha de cortes" (pré-visualização de impressão: A4, preto e branco, 2 páginas no exemplo); Histórico (fazer um pedido de madeira, desenhar, "Ver em 3D", apagar, guardar/recuperar cópia).
 Os testes automáticos não cobrem a interface. Depois de mexer em UI, abrir a página e verificar à mão.
 
 ## Ramos e publicação

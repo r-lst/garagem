@@ -285,6 +285,7 @@ let mesh = null;
 let previewMesh = null;
 let previewMode = null;
 let fittedOnce = false;
+let rodadaAuto = null; // texto de como a peça foi rodada para caber (mostra a faixa com Desfazer)
 const history = [];
 const matPrev = new THREE.MeshBasicMaterial({ color: 0xe11d48, transparent: true, opacity: 0.42, depthWrite: false });
 
@@ -303,34 +304,91 @@ function partInfo() {
   const b = G.bbox(geo);
   return { sx: b.size.x, sy: b.size.y, sz: b.size.z, minx: b.min.x, maxx: b.max.x, miny: b.min.y, maxy: b.max.y, minz: b.min.z, maxz: b.max.z };
 }
-function fitReport(size) {
-  const lim = [bed().x, bed().y, bed().z];
-  const dims = [size.x, size.y, size.z];
-  const per = dims.map((d, i) => d <= lim[i] + 1e-6);
-  const ok = per.every(Boolean);
-  let tip = '';
-  if (!ok) {
-    const perms = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
-    tip = perms.find((p) => p.every((di, i) => dims[di] <= lim[i])) ? 'Cabe se rodares a peça (secção "Rodar").' : 'Não cabe em nenhuma posição. Corta-a em partes (secção "Cortar") ou reduz o tamanho.';
+// ---------- caber na impressora ----------
+const CURTO = { x: 'comprimento', y: 'largura', z: 'altura' };
+const mm = (v) => fmt(v, Math.abs(v) < 10 ? 1 : 0) + ' mm';
+const nomeImp = () => perfil.impressora || 'impressora';
+const solucoes = new WeakMap();
+/** Posição em que a peça cabe (ver G.rodarParaCaber), guardada por peça e por volume de impressão. */
+function solucao(g) {
+  const k = Object.values(bed()).join('×');
+  const c = solucoes.get(g);
+  if (c && c.k === k) return c.r;
+  const r = G.rodarParaCaber(g, bed());
+  solucoes.set(g, { k, r });
+  return r;
+}
+function renderFaixa(exc) {
+  const el = $('#faixa-k1');
+  if (!geo || (!rodadaAuto && !exc.length)) { el.hidden = true; return; }
+  el.hidden = false;
+  if (rodadaAuto) {
+    el.className = 'faixa-k1 info';
+    el.innerHTML = `<b>${icon('certo')}Rodei a peça para caber na ${esc(nomeImp())}.</b><span>${esc(rodadaAuto)}</span><div class="row"><button class="sec" data-faixa="desfazer">${icon('desfazer')}Desfazer</button></div>`;
+    return;
   }
-  return { per, ok, tip, lim };
+  const sol = solucao(geo);
+  el.className = 'faixa-k1 erro-k1';
+  el.innerHTML = `<b>✗ ${sol ? 'Não cabe na' : 'A peça excede o tamanho da'} ${esc(nomeImp())}</b>`
+    + exc.map((e) => `<span>${e.nome}: ${mm(e.medida)} — o máximo é ${mm(e.max)} (${mm(e.aMais)} a mais)</span>`).join('')
+    + (sol ? `<div class="row"><button data-faixa="rodar">${icon('enquadrar')}Rodar para caber</button></div>`
+      : '<span>Não cabe em nenhuma posição. Reduz o tamanho em "Medidas e tamanho" ou corta-a em partes em "Cortar a peça".</span>');
+}
+$('#faixa-k1').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-faixa]');
+  if (!b) return;
+  if (b.dataset.faixa === 'desfazer') $('#desfazer').click();
+  else rodarParaCaber('Peça rodada para caber.');
+});
+/** Roda a peça aberta para caber, se houver posição. Devolve true se rodou. */
+function rodarParaCaber(msg) {
+  if (!geo) return false;
+  const s = solucao(geo);
+  if (!s || !s.como) return false;
+  setGeo(s.geo, msg, { fit: true });
+  rodadaAuto = s.como;
+  refreshAxisUI(true);
+  updateInfo();
+  return true;
+}
+/** Chamado quando a peça entra (abrir, criar, importar): roda sozinha se não couber e houver posição. */
+function rodarAoEntrar() {
+  if (!geo || !G.excessos(G.bbox(geo).size, bed()).length) return;
+  // no telemóvel a faixa fica no topo e o pai está no formulário: a mensagem em baixo também avisa
+  if (rodarParaCaber(`Rodei a peça para caber na ${nomeImp()}. Vê o aviso por cima do desenho.`)) return;
+  toast(`A peça não cabe na ${nomeImp()}. Vê o aviso por cima do desenho.`, true);
+}
+function avisoMedidas() {
+  const el = $('#aviso-medidas');
+  const t = { x: val($('#mx')), y: val($('#my')), z: val($('#mz')) };
+  const exc = Object.values(t).every((v) => v > 0) ? G.excessos(t, bed()) : [];
+  el.className = 'aviso' + (exc.length ? ' on' : '');
+  el.innerHTML = exc.length ? `<span class="bad">✗</span> Com estas medidas não cabe na ${esc(nomeImp())}: ${exc.map((e) => `${CURTO[e.eixo]} ${mm(e.medida)}, máximo ${mm(e.max)}`).join('; ')}.` : '';
 }
 function updateInfo() {
   const el = $('#info');
   $('#vazio').style.display = geo ? 'none' : 'flex';
-  if (!geo) { el.innerHTML = '<span class="muted">Sem peça aberta.</span>'; return; }
+  if (!geo) { el.innerHTML = '<span class="muted">Sem peça aberta.</span>'; renderFaixa([]); $('#aviso-guardar').hidden = true; return; }
   const b = G.bbox(geo);
   const s = G.stats(geo);
-  const f = fitReport(b.size);
-  if (volLines) { volLines.material.color.set(f.ok ? 0xc2561b : 0xe11d48); volLines.material.opacity = f.ok ? 0.45 : 0.9; }
-  const row = (nome, v, i) => `<tr><td>${nome}</td><td><b>${fmt(v)} mm</b></td><td class="muted">${fmt(f.lim[i], 0)} mm</td><td class="${f.per[i] ? 'ok' : 'bad'}">${f.per[i] ? '✓' : '✗'}</td></tr>`;
+  const lim = bed();
+  const exc = G.excessos(b.size, lim);
+  const ok = !exc.length;
+  const falha = Object.fromEntries(exc.map((e) => [e.eixo, e]));
+  if (volLines) { volLines.material.color.set(ok ? 0xc2561b : 0xe11d48); volLines.material.opacity = ok ? 0.45 : 0.9; }
+  const row = (nome, e) => `<tr><td>${nome}</td><td><b>${fmt(b.size[e])} mm</b></td><td class="muted">${fmt(lim[e], 0)} mm</td><td class="${falha[e] ? 'bad' : 'ok'}">${falha[e] ? '✗ +' + mm(falha[e].aMais) : '✓'}</td></tr>`;
   el.innerHTML = `<table><tr><th>Eixo</th><th>Medida</th><th>Máx. ${esc(perfil.impressora || '')}</th><th></th></tr>
-    ${row('Comprimento X', b.size.x, 0)}${row('Largura Y', b.size.y, 1)}${row('Altura Z', b.size.z, 2)}</table>
-    ${f.ok ? '<div class="ok">✓ Cabe na impressora</div>' : `<div class="bad">✗ Não cabe. ${f.tip}</div>`}
+    ${row('Comprimento X', 'x')}${row('Largura Y', 'y')}${row('Altura Z', 'z')}</table>
+    ${ok ? '<div class="ok">✓ Cabe na impressora</div>' : `<div class="bad">${solucao(geo) ? '✗ Não cabe. Usa "Rodar para caber", por cima do desenho.' : '✗ Não cabe em nenhuma posição.'}</div>`}
     <div class="muted" style="margin-top:6px">Volume ${fmt(s.volume / 1000, 1)} cm³ (≈ ${fmt((s.volume / 1000) * 1.24 * 0.35, 0)} g de PLA com 20% de enchimento) · ${s.closed ? '✓ malha fechada' : '✗ malha com buracos: cortes e furos podem falhar'}</div>`;
+  renderFaixa(exc);
+  const ag = $('#aviso-guardar');
+  ag.hidden = ok;
+  ag.textContent = ok ? '' : `✗ Esta peça não cabe na ${nomeImp()} (${exc.map((e) => `${CURTO[e.eixo]} ${mm(e.medida)}, máximo ${mm(e.max)}`).join('; ')}).`;
   if (!$('#painel').contains(document.activeElement)) syncMedidas();
 }
 function syncMedidas() {
+  $('#aviso-medidas').className = 'aviso';
   if (!geo) return;
   const b = G.bbox(geo);
   $('#mx').value = Math.round(b.size.x * 100) / 100;
@@ -345,6 +403,7 @@ function showMesh() {
   PV.scene.add(mesh);
 }
 function setGeo(g, msg, { fit = false, noHistory = false } = {}) {
+  rodadaAuto = null;
   if (geo && !noHistory) { history.push(geo); if (history.length > 30) history.shift(); }
   geo = g;
   showMesh();
@@ -360,6 +419,7 @@ function setGeo(g, msg, { fit = false, noHistory = false } = {}) {
 }
 $('#desfazer').addEventListener('click', () => {
   if (!history.length) return;
+  rodadaAuto = null;
   geo = history.pop();
   showMesh();
   previewMode = null;
@@ -434,6 +494,7 @@ async function loadFile(file) {
     setGeo(g, `Aberto: ${file.name}`, { fit: true, noHistory: true });
     refreshAxisUI(true);
     $('#desfazer').disabled = true;
+    rodarAoEntrar();
   } catch (e) {
     console.error(e);
     toast('Não consegui abrir o ficheiro: ' + (e.message || e), true);
@@ -462,6 +523,7 @@ $('#gerar').addEventListener('click', () => later(() => {
     $('#nome-saida').value = gerSel.value + '.stl';
     setGeo(out, 'Peça criada.', { fit: true });
     refreshAxisUI(true);
+    rodarAoEntrar();
   } catch (e) { toast(e.message || String(e), true); }
 }));
 $('#construir').addEventListener('click', () => {
@@ -480,6 +542,7 @@ $('#construir').addEventListener('click', () => {
       }
       setGeo(out, usarBase ? 'Alterações aplicadas.' : 'Peça construída.', { fit: !usarBase });
       refreshAxisUI(true);
+      if (!usarBase) rodarAoEntrar();
     } catch (e) {
       erro.textContent = e.message || String(e);
       erro.className = 'erro on';
@@ -497,7 +560,7 @@ function onMedida(changed) {
   const k = v / base[changed];
   for (const id of ['mx', 'my', 'mz']) if (id !== changed) $('#' + id).value = Math.round(base[id] * k * 100) / 100;
 }
-['mx', 'my', 'mz'].forEach((id) => $('#' + id).addEventListener('input', () => onMedida(id)));
+['mx', 'my', 'mz'].forEach((id) => $('#' + id).addEventListener('input', () => { onMedida(id); avisoMedidas(); }));
 $('#aplicar-medidas').addEventListener('click', () => run('Medidas aplicadas.', (g) => {
   const b = G.bbox(g).size;
   const t = [val($('#mx')), val($('#my')), val($('#mz'))];

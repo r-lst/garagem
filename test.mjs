@@ -78,5 +78,28 @@ const pr = buildPrompt({ modo: 'alterar', texto: 'furo de 6 mm', perfil: { impre
 ok(/40 × 30 × 20/.test(pr) && /carregada/.test(pr) && /Creality K1/.test(pr), 'prompt alterar inclui medidas e perfil');
 ok(/lista de cortes/i.test(buildPrompt({ modo: 'madeira', texto: 'x' })), 'prompt madeira');
 
+// Caber na K1 (220 × 220 × 250)
+const K1 = { x: 220, y: 220, z: 250 };
+const bloco = (x, y, z) => G.placeOnBed(buildSpec({ operacoes: [{ op: 'add', forma: 'caixa', tamanho: [x, y, z] }] }));
+const tam = (g) => !g ? "nada" : G.bbox(g).size.toArray().map((v) => Math.round(v));
+const exc = G.excessos({ x: 100, y: 230, z: 280 }, K1);
+ok(exc.length === 2 && exc[0].eixo === 'y' && near(exc[1].aMais, 30) && exc[1].nome === 'Altura (Z)', 'excessos: largura +10 e altura +30');
+ok(G.excessos({ x: 220.005, y: 220, z: 250 }, K1).length === 0, 'excessos: 0,005 mm a mais não conta');
+let rc = G.rodarParaCaber(bloco(100, 50, 30), K1);
+ok(rc && rc.como === null, 'já cabe: não roda');
+rc = G.rodarParaCaber(bloco(60, 40, 260), K1);
+ok(rc && /Virei/.test(rc.como) && !G.excessos(G.bbox(rc.geo).size, K1).length && near(G.bbox(rc.geo).min.z, 0), `260 de altura: vira (${tam(rc?.geo)})`);
+rc = G.rodarParaCaber(bloco(100, 230, 30), K1);
+ok(rc && /Virei/.test(rc.como) && !G.excessos(G.bbox(rc.geo).size, K1).length, `100 × 230 × 30: na diagonal não cabe (233 mm), fica de pé (${tam(rc?.geo)})`);
+rc = G.rodarParaCaber(bloco(230, 20, 30), K1);
+ok(rc && /diagonal/.test(rc.como) && /mesma face/.test(rc.como) && near(G.bbox(rc.geo).size.z, 30) && !G.excessos(G.bbox(rc.geo).size, K1).length, `230 × 20 × 30: diagonal, mesma face (${tam(rc?.geo)})`);
+rc = G.rodarParaCaber(bloco(240, 30, 10), K1);
+ok(rc && /mesma face/.test(rc.como) && near(G.bbox(rc.geo).size.z, 10), `barra 240 × 30 × 10: fica deitada, não de pé (${tam(rc?.geo)})`);
+ok(G.rodarParaCaber(bloco(300, 100, 30), K1) === null, '300 × 100 × 30: não cabe de nenhuma forma');
+rc = G.rodarParaCaber(bloco(300, 20, 10), K1);
+ok(rc && /diagonal/.test(rc.como) && !G.excessos(G.bbox(rc.geo).size, K1).length, `300 de comprido: na diagonal (${tam(rc?.geo)}) — ${rc?.como}`);
+ok(G.rodarParaCaber(bloco(240, 240, 240), K1) === null, '240 × 240 × 240: não cabe de forma nenhuma');
+ok(G.rodarParaCaber(bloco(400, 20, 10), K1) === null, '400 de comprido: nem na diagonal');
+
 console.log(fails ? `\n${fails} FALHAS` : '\nTudo OK');
 process.exit(fails ? 1 : 0);

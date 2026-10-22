@@ -182,6 +182,7 @@
           <div><label for="my">Y (mm)</label><input type="number" id="my" step="any" min="0"></div>
           <div><label for="mz">Z (mm)</label><input type="number" id="mz" step="any" min="0"></div>
         </div>
+        <div id="aviso-medidas" class="aviso"></div>
         <label class="tog"><input type="checkbox" id="prop" checked> Manter as proporções</label>
         <div class="row"><button id="aplicar-medidas">Aplicar medidas</button></div>
         <label for="pct">Ou escalar em percentagem</label>
@@ -243,12 +244,14 @@
         <h3><span class="num">4</span> Guardar</h3>
         <label for="nome-saida">Nome do ficheiro</label>
         <input type="text" id="nome-saida" value="peca.stl">
+        <p id="aviso-guardar" class="bad" hidden></p>
         <div class="row"><button id="guardar" class="grande" data-i="guardar">Guardar STL</button></div>
         <p class="muted">Vai para a pasta Transferências. Abre-o no Cura ou no Creality Print.</p>
       </div>
     </div>
 
     <div class="viewcol">
+      <div class="faixa-k1" id="faixa-k1" hidden></div>
       <div class="viewer" id="viewer">
         <div class="vazio" id="vazio"><div><span data-i="peca"></span><p>Abre um ficheiro STL, cria uma peça ou importa do Claude.</p></div></div>
         <div class="dica-rato">Arrastar: rodar · Botão direito: mover · Roda: aproximar</div>

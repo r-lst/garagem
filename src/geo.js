@@ -81,6 +81,59 @@ export function placeOnBed(g) {
   return applied(g, new THREE.Matrix4().makeTranslation(-b.center.x, -b.center.y, -b.min.z));
 }
 
+// ---------- caber no volume de impressão ----------
+const NOME_EIXO = { x: 'Comprimento (X)', y: 'Largura (Y)', z: 'Altura (Z)' };
+
+/** Medidas que passam do volume de impressão lim {x,y,z}: [{eixo, nome, medida, max, aMais}]. Folga de 0,01 mm. */
+export function excessos(size, lim, tol = 0.01) {
+  const out = [];
+  for (const e of ['x', 'y', 'z']) if (size[e] > lim[e] + tol) out.push({ eixo: e, nome: NOME_EIXO[e], medida: size[e], max: lim[e], aMais: size[e] - lim[e] });
+  return out;
+}
+
+/** Medidas em XY de uma rotação em Z de θ graus (em torno da origem), só com os vértices. */
+function pegada(pos, deg) {
+  const a = THREE.MathUtils.degToRad(deg), c = Math.cos(a), s = Math.sin(a);
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (let i = 0; i < pos.length; i += 3) {
+    const x = pos[i] * c - pos[i + 1] * s, y = pos[i] * s + pos[i + 1] * c;
+    if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  return { x: x1 - x0, y: y1 - y0 };
+}
+
+/**
+ * Procura uma posição em que a peça caiba no volume lim {x,y,z}, da mais parecida com a original para a menos:
+ * 1. rodar 90° na mesa; 2. na diagonal da mesa (estas duas mantêm a face de baixo);
+ * 3. virar a peça para outra face; 4. virada e na diagonal.
+ * Devolve {geo, como} (geo já assente na mesa), ou null se não couber de nenhuma forma. Se já cabe: {geo: g, como: null}.
+ */
+export function rodarParaCaber(g, lim, tol = 0.01) {
+  const cabe = (s) => !excessos(s, lim, tol).length;
+  if (cabe(bbox(g).size)) return { geo: g, como: null };
+  const rodada = (r, como) => (cabe(bbox(r).size) ? { geo: placeOnBed(r), como } : null);
+  const diagonal = (base, como) => {
+    const b = placeOnBed(base);
+    if (bbox(b).size.z > lim.z + tol) return null;
+    const pos = b.getAttribute('position').array;
+    let melhor = null;
+    for (let deg = 1; deg < 90; deg++) {
+      const p = pegada(pos, deg);
+      const folga = Math.min(lim.x - p.x, lim.y - p.y);
+      if (folga >= -tol && (!melhor || folga > melhor.folga)) melhor = { deg, folga };
+    }
+    return melhor && { geo: placeOnBed(rotate(b, 'z', melhor.deg)), como: como.replace('{deg}', melhor.deg) };
+  };
+  return rodada(rotate(g, 'z', 90), 'Rodei-a 90° na mesa (continua assente na mesma face).')
+    || diagonal(g, 'Pus-a na diagonal da mesa, rodada {deg}° (continua assente na mesma face).')
+    || rodada(rotate(g, 'x', 90), 'Virei-a: agora assenta noutra face.')
+    || rodada(rotate(g, 'y', 90), 'Virei-a: agora assenta noutra face.')
+    || rodada(rotate(rotate(g, 'x', 90), 'z', 90), 'Virei-a e rodei-a 90° na mesa: agora assenta noutra face.')
+    || rodada(rotate(rotate(g, 'y', 90), 'z', 90), 'Virei-a e rodei-a 90° na mesa: agora assenta noutra face.')
+    || diagonal(rotate(g, 'x', 90), 'Virei-a e pus-a na diagonal da mesa, rodada {deg}°.')
+    || diagonal(rotate(g, 'y', 90), 'Virei-a e pus-a na diagonal da mesa, rodada {deg}°.');
+}
+
 /** Contagem de triângulos, volume (mm³) e se a malha está fechada (sem buracos que se vejam). */
 export function stats(g) {
   const p = g.getAttribute('position');
