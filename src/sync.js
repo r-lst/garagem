@@ -42,7 +42,7 @@ async function pedido(base, caminho, codigo, opts, fetchFn) {
   let r;
   try {
     r = await fetchFn(base.replace(/\/+$/, '') + caminho, { ...opts, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + codigo } });
-  } catch { throw new Error('Sem ligação à internet.'); }
+  } catch { throw new Error('Não consegui ligar. Verifica a internet.'); }
   if (r.status === 401) throw new Error('A chave da cópia online está errada.');
   if (r.status === 429) throw new Error('Demasiados pedidos. Tenta daqui a um minuto.');
   if (r.status === 409) throw new Error('A cópia online está a ser alterada noutro sítio. Tenta mais tarde.');
