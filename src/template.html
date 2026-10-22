@@ -42,6 +42,7 @@
     <a class="cartao" href="#projeto"><span class="ci" data-i="projeto"></span><h3>Ver projeto</h3><p>Cola a resposta do Claude e vê o móvel em 3D, peça a peça, com medidas.</p><span class="ir" data-i="seta">Abrir</span></a>
     <a class="cartao" href="#peca"><span class="ci" data-i="peca"></span><h3>Peça 3D</h3><p>Abre um STL, muda medidas, faz furos e cortes, e guarda para imprimir.</p><span class="ir" data-i="seta">Abrir</span></a>
     <a class="cartao" href="#cortes"><span class="ci" data-i="cortes"></span><h3>Cortes de madeira</h3><p>Quantas tábuas comprar e como cortar cada uma, com o mínimo de desperdício.</p><span class="ir" data-i="seta">Abrir</span></a>
+    <a class="cartao" href="#pedir" id="cartao-reparar"><span class="ci" data-i="reparar"></span><h3>Reparar alguma coisa</h3><p>Descreve a avaria e junta uma foto. O Claude ajuda a perceber a causa e a resolver.</p><span class="ir" data-i="seta">Abrir</span></a>
   </div>
 
   <div class="como">
@@ -71,9 +72,13 @@
 
   <div class="passo" data-passo="2" hidden>
     <div class="escolhido" id="escolhido"></div>
-    <label for="pedido" class="q">O que queres?</label>
+    <div id="areas" hidden>
+      <p class="q">O que se avariou? <span class="muted">(opcional)</span></p>
+      <div class="chips" id="areas-chips"></div>
+    </div>
+    <label for="pedido" class="q" id="pedido-l">O que queres?</label>
     <textarea id="pedido" rows="7"></textarea>
-    <div class="dicas"><b>Ajuda o Claude se disseres:</b> o que é e para que serve · medidas aproximadas · onde vai ficar · o material que tens. Se não souberes, não faz mal: ele pergunta.</div>
+    <div class="dicas" id="pedido-dicas"></div>
     <div id="aviso-peca" class="aviso"></div>
     <div class="row entre">
       <button class="sec" id="voltar1" data-i="voltar">Voltar</button>
@@ -85,7 +90,7 @@
     <div class="acoes">
       <div class="acao"><b>1</b><div><h4>Copiar o pedido</h4><button id="copiar" class="grande" data-i="copiar">Copiar pedido</button><span id="copiado" class="ok" hidden></span></div></div>
       <div class="acao"><b>2</b><div><h4>Abrir o Claude</h4><a id="abrir-claude" class="btn sec grande" href="https://claude.ai/new" target="_blank" rel="noopener" data-i="abrir">Abrir o Claude</a></div></div>
-      <div class="acao"><b>3</b><div><h4>Colar e enviar</h4><p>Clica na caixa de texto do Claude, carrega <kbd>Ctrl</kbd> + <kbd>V</kbd> e envia. Responde às perguntas uma a uma.</p></div></div>
+      <div class="acao"><b>3</b><div><h4 id="colar-t">Colar e enviar</h4><p>Clica na caixa de texto do Claude, carrega <kbd>Ctrl</kbd> + <kbd>V</kbd><span id="colar-foto" hidden>, junta uma ou duas fotos da avaria</span> e envia. Responde às perguntas uma a uma.</p><p class="muted" id="foto-como" hidden>Para juntar a foto: no computador, carrega no clipe da caixa do Claude ou arrasta a foto para lá; no telemóvel, carrega no + e escolhe a foto.</p></div></div>
     </div>
     <div class="depois">
       <h3>Quando o Claude terminar</h3>

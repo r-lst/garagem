@@ -54,6 +54,18 @@ let msg = '';
 try { H.importar('{"x":1}'); } catch (e) { msg = e.message; }
 ok(msg === 'Este ficheiro não é uma cópia da Garagem.', 'erro: ' + msg);
 
+// reparações
+let R = H.registarPedido([], { modo: 'reparacao', texto: 'torneira pinga', pedido: 'PR', area: 'Canalização' }, 5000).lista;
+const idR = R[0].id;
+ok(H.MODOS_HIST.includes('reparacao') && R[0].area === 'Canalização' && R[0].estado === 'pedido', 'reparação entra no histórico com a área');
+R = H.guardarResposta(R, idR, '  1. Causas: vedante gasto  ', 5100);
+ok(R[0].resposta === '1. Causas: vedante gasto' && R[0].atualizado === 5100, 'guardar a resposta do Claude');
+R = H.marcarResolvida(R, idR, true, 5200);
+ok(R[0].estado === 'resolvida' && R[0].atualizado === 5200, 'marcar como resolvida');
+ok(H.registarProjeto(R, { nome: 'X', pecas: [] }, 5300).novo, 'projeto de madeira não se liga a uma reparação');
+ok(H.juntar(H.marcarResolvida(R, idR, false, 5400), R).find((e) => e.id === idR).estado === 'pedido', 'voltar a abrir ganha por ser mais recente');
+ok(paraFicheiros(R)[`historico/${idR}.json`].resposta === '1. Causas: vedante gasto', 'a resposta vai na cópia online');
+
 // link do telemóvel e ficheiros
 ok(chaveDoLink('#k=abc123')?.chave === 'abc123' && chaveDoLink('#k=abc123').resto === '', 'chave no link #k=');
 ok(chaveDoLink('#historico&k=abc')?.resto === 'historico', 'chave no link com separador');

@@ -7,7 +7,7 @@ import * as G from './geo.js';
 import * as PJ from './project.js';
 import { GERADORES, buildSpec, extractJSON } from './shapes.js';
 import { parseLines, planGroups } from './cuts.js';
-import { buildPrompt, MODOS } from './prompts.js';
+import { buildPrompt, MODOS, AREAS_REPARACAO } from './prompts.js';
 import { folhaCortes } from './folha.js';
 import { icon, fillIcons } from './icons.js';
 import * as H from './historico.js';
@@ -170,11 +170,24 @@ const MODO_INFO = {
   peca3d: { i: 'novo', d: 'Suportes, caixas, adaptadores, peças de substituição.' },
   alterar: { i: 'alterar', d: 'Mudar uma peça que já tens em STL: furos, abas, encaixes.' },
   madeira: { i: 'madeira', d: 'Móveis e construções. Vês em 3D e recebes a lista de cortes.' },
+  reparacao: { i: 'reparar', d: 'Uma avaria em casa ou na garagem. Junta uma foto e o Claude ajuda a resolver.' },
   plano: { i: 'plano', d: 'Organizar um trabalho: etapas, materiais e tempos.' },
   outro: { i: 'outro', d: 'Ainda não sabes bem. O Claude ajuda a descobrir.' },
 };
 let modo = null;
-const DESTINO = { projeto: ['#projeto', 'Ir para Ver projeto'], peca: ['#peca', 'Ir para Peça 3D'] };
+let area = '';
+const DESTINO = { projeto: ['#projeto', 'Ir para Ver projeto'], peca: ['#peca', 'Ir para Peça 3D'], historico: ['#historico', 'Ir para o Histórico'] };
+const DICAS = {
+  normal: '<b>Ajuda o Claude se disseres:</b> o que é e para que serve · medidas aproximadas · onde vai ficar · o material que tens. Se não souberes, não faz mal: ele pergunta.',
+  reparacao: '<b>Ajuda o Claude se disseres:</b> o que é · o que acontece e desde quando · o que já experimentaste.',
+};
+$('#areas-chips').innerHTML = AREAS_REPARACAO.map((a) => `<button class="sec" data-area="${esc(a)}">${esc(a)}</button>`).join('');
+$('#areas-chips').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-area]');
+  if (!b) return;
+  area = area === b.dataset.area ? '' : b.dataset.area;
+  $$('#areas-chips button').forEach((x) => x.classList.toggle('on', x.dataset.area === area));
+});
 $('#modos').innerHTML = Object.entries(MODOS).map(([k, m]) => `<button class="tile" data-modo="${k}"><span class="ci">${icon(MODO_INFO[k].i)}</span><span><b>${m.nome}</b><span class="d">${MODO_INFO[k].d}</span></span></button>`).join('');
 function setStep(n) {
   $$('#stepper li').forEach((li) => { const s = Number(li.dataset.s); li.className = s === n ? 'on' : s < n ? 'feito' : ''; });
@@ -195,17 +208,31 @@ $('#modos').addEventListener('click', (e) => {
   $('#escolhido').innerHTML = `<span class="ci">${icon(MODO_INFO[modo].i)}</span><b>${MODOS[modo].nome}</b><button class="sec" id="mudar-tipo">Mudar</button>`;
   $('#mudar-tipo').addEventListener('click', () => setStep(1));
   $('#pedido').placeholder = MODOS[modo].placeholder;
+  const rep = modo === 'reparacao';
+  $('#areas').hidden = !rep;
+  $('#pedido-l').textContent = rep ? 'O que se passa?' : 'O que queres?';
+  $('#pedido-dicas').innerHTML = rep ? DICAS.reparacao : DICAS.normal;
   avisoPeca();
   setStep(2);
   setTimeout(() => $('#pedido').focus(), 300);
 });
 $('#voltar1').addEventListener('click', () => setStep(1));
 $('#voltar2').addEventListener('click', () => setStep(2));
-$('#novo-pedido').addEventListener('click', () => { $('#pedido').value = ''; pedidoAtualId = null; setStep(1); });
+$('#novo-pedido').addEventListener('click', () => { $('#pedido').value = ''; pedidoAtualId = null; area = ''; $$('#areas-chips button').forEach((x) => x.classList.remove('on')); setStep(1); });
+$('#cartao-reparar').addEventListener('click', (e) => {
+  e.preventDefault();
+  goto('pedir');
+  $('[data-modo="reparacao"]').click();
+});
 $('#criar').addEventListener('click', () => {
   const texto = $('#pedido').value;
   if (!texto.trim() && !confirm('Não escreveste nada. Queres criar o pedido na mesma?')) return;
-  $('#saida').value = buildPrompt({ modo, texto, perfil, peca: modo === 'alterar' ? partInfo() : null });
+  const rep = modo === 'reparacao';
+  const areaPedido = rep ? area : '';
+  $('#saida').value = buildPrompt({ modo, texto, perfil, peca: modo === 'alterar' ? partInfo() : null, area: areaPedido });
+  $('#colar-t').textContent = rep ? 'Colar, juntar as fotos e enviar' : 'Colar e enviar';
+  $('#colar-foto').hidden = !rep;
+  $('#foto-como').hidden = !rep;
   $('#pos-passos').innerHTML = MODOS[modo].pos;
   const d = DESTINO[MODOS[modo].destino];
   const ir = $('#ir-destino');
@@ -213,7 +240,7 @@ $('#criar').addEventListener('click', () => {
   if (d) { ir.href = d[0]; ir.innerHTML = icon('seta') + d[1]; }
   $('#copiado').hidden = true;
   if (H.MODOS_HIST.includes(modo)) {
-    const r = H.registarPedido(hist, { id: pedidoAtualId, modo, texto, pedido: $('#saida').value });
+    const r = H.registarPedido(hist, { id: pedidoAtualId, modo, texto, pedido: $('#saida').value, area: areaPedido });
     pedidoAtualId = r.id;
     setHist(r.lista);
   }
@@ -1076,26 +1103,38 @@ function setHist(lista) {
   renderHist();
   agendarSync();
 }
+let editarResposta = null; // id da reparação cuja resposta está a ser escrita
 function renderHist() {
   const lista = H.ordenados(hist);
+  // a sincronização pode redesenhar enquanto o pai escreve: guardar o rascunho
+  const rascunho = editarResposta ? $(`#resp-${editarResposta}`)?.value : null;
   if (!lista.length) {
-    $('#hist-lista').innerHTML = `<div class="bloco hist-vazio"><span class="ci">${icon('historico')}</span><div><p>Ainda não há pedidos. Quando fizeres um pedido de madeira, um plano de trabalho ou "outra coisa", aparece aqui.</p><a class="btn" href="#pedir">${icon('pedir')}Fazer um pedido</a></div></div>`;
+    $('#hist-lista').innerHTML = `<div class="bloco hist-vazio"><span class="ci">${icon('historico')}</span><div><p>Ainda não há pedidos. Quando fizeres um pedido de madeira, uma reparação, um plano de trabalho ou "outra coisa", aparece aqui.</p><a class="btn" href="#pedir">${icon('pedir')}Fazer um pedido</a></div></div>`;
     return;
   }
   $('#hist-lista').innerHTML = lista.map((e) => {
-    const pronto = e.estado === 'projeto';
+    const rep = e.modo === 'reparacao';
+    const pronto = e.estado === 'projeto' || e.estado === 'resolvida';
+    const estado = e.estado === 'projeto' ? 'Projeto pronto' : e.estado === 'resolvida' ? 'Resolvida' : 'Pedido feito';
     const texto = String(e.texto || '').trim();
+    const resposta = String(e.resposta || '');
+    const editar = editarResposta === e.id;
     return `<article class="hist-item" data-id="${esc(e.id)}">
       <div class="hist-top"><span class="ci">${icon(MODO_INFO[e.modo]?.i || 'outro')}</span>
-        <div class="hist-tit"><h3>${esc(H.titulo(e, NOMES_MODO))}</h3><p class="muted">${esc(quando(e.criado))} · ${esc(NOMES_MODO[e.modo] || '')}</p></div>
-        <span class="estado ${pronto ? 'pronto' : ''}">${pronto ? icon('certo') + 'Projeto pronto' : 'Pedido feito'}</span></div>
-      ${texto && (pronto || texto.length > 60) ? `<p class="hist-texto">«${esc(texto)}»</p>` : ''}
-      <div class="row">
-        ${pronto ? `<button data-acao="ver">${icon('projeto')}Ver em 3D</button>` : ''}
+        <div class="hist-tit"><h3>${esc(H.titulo(e, NOMES_MODO))}</h3><p class="muted">${esc(quando(e.criado))} · ${esc(NOMES_MODO[e.modo] || '')}${e.area ? ' · ' + esc(e.area) : ''}</p></div>
+        <span class="estado ${pronto ? 'pronto' : ''}">${pronto ? icon('certo') : ''}${estado}</span></div>
+      ${texto && (e.estado === 'projeto' || texto.length > 60) ? `<p class="hist-texto">«${esc(texto)}»</p>` : ''}
+      ${rep && resposta && !editar ? `<details class="hist-resposta"><summary>Resposta do Claude</summary><div>${esc(resposta)}</div></details>` : ''}
+      ${editar ? `<label class="q-peq" for="resp-${esc(e.id)}">Cola aqui a resposta do Claude</label><textarea id="resp-${esc(e.id)}" rows="8">${esc(rascunho ?? resposta)}</textarea>
+        <div class="row"><button data-acao="resp-guardar">${icon('guardar')}Guardar a resposta</button><button class="sec" data-acao="resp-cancelar">Cancelar</button></div>` : `<div class="row">
+        ${e.estado === 'projeto' ? `<button data-acao="ver">${icon('projeto')}Ver em 3D</button>` : ''}
         ${e.pedido ? `<button class="sec" data-acao="copiar">${icon('copiar')}Copiar o pedido</button>` : ''}
+        ${rep ? `<button class="sec" data-acao="resp-editar">${icon('colar')}${resposta ? 'Mudar a resposta' : 'Guardar a resposta'}</button>` : ''}
+        ${rep ? `<button class="sec" data-acao="resolvida">${icon('certo')}${e.estado === 'resolvida' ? 'Voltar a abrir' : 'Marcar como resolvida'}</button>` : ''}
         <button class="sec" data-acao="apagar">${icon('apagar')}Apagar</button>
-      </div></article>`;
+      </div>`}</article>`;
   }).join('');
+  if (editarResposta && rascunho == null) $(`#resp-${editarResposta}`)?.focus();
 }
 async function copiarTexto(txt) {
   try { await navigator.clipboard.writeText(txt); return true; } catch { /* método antigo */ }
@@ -1121,6 +1160,21 @@ $('#hist-lista').addEventListener('click', async (ev) => {
   } else if (b.dataset.acao === 'copiar') {
     if (await copiarTexto(e.pedido)) toast('Pedido copiado. Cola-o no Claude com Ctrl + V.');
     else toast('Não consegui copiar. Faz o pedido outra vez em "Pedir ao Claude".', true);
+  } else if (b.dataset.acao === 'resp-editar') {
+    editarResposta = e.id;
+    renderHist();
+  } else if (b.dataset.acao === 'resp-cancelar') {
+    editarResposta = null;
+    renderHist();
+  } else if (b.dataset.acao === 'resp-guardar') {
+    const txt = $(`#resp-${e.id}`).value;
+    editarResposta = null;
+    setHist(H.guardarResposta(hist, e.id, txt));
+    toast(txt.trim() ? 'Resposta guardada.' : 'Resposta apagada.');
+  } else if (b.dataset.acao === 'resolvida') {
+    const fica = e.estado !== 'resolvida';
+    setHist(H.marcarResolvida(hist, e.id, fica));
+    toast(fica ? 'Marcada como resolvida.' : 'Voltou a ficar aberta.');
   } else if (b.dataset.acao === 'apagar') {
     if (!confirm(`Apagar "${H.titulo(e, NOMES_MODO)}" do histórico?`)) return;
     if (pedidoAtualId === e.id) pedidoAtualId = null;

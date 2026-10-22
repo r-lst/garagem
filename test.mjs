@@ -77,6 +77,10 @@ ok(exact.count === 1, 'duas de 1200 com serra de 3 mm cabem em 2403');
 const pr = buildPrompt({ modo: 'alterar', texto: 'furo de 6 mm', perfil: { impressora: 'Creality K1', vx: 220, vy: 220, vz: 250, material: 'PLA' }, peca: { sx: 40, sy: 30, sz: 20, minx: -20, maxx: 20, miny: -15, maxy: 15, minz: 0, maxz: 20 } });
 ok(/40 × 30 × 20/.test(pr) && /carregada/.test(pr) && /Creality K1/.test(pr), 'prompt alterar inclui medidas e perfil');
 ok(/lista de cortes/i.test(buildPrompt({ modo: 'madeira', texto: 'x' })), 'prompt madeira');
+const prep = buildPrompt({ modo: 'reparacao', texto: 'a torneira pinga', area: 'Canalização' });
+ok(/fotos/.test(prep) && /disjuntor/.test(prep) && /técnico de gás/.test(prep) && /É sobre: Canalização/.test(prep) && /Passos para a causa mais provável/.test(prep), 'prompt reparação: fotos, quadro, gás, área, formato');
+ok(!/JSON/.test(prep) && !/O QUE QUERO/.test(prep), 'prompt reparação: sem JSON');
+ok(!/Impressora/.test(buildPrompt({ modo: 'reparacao', texto: 'x', perfil: { impressora: 'Creality K1', ferramentas: 'berbequim' } })) && /berbequim/.test(buildPrompt({ modo: 'reparacao', texto: 'x', perfil: { impressora: 'Creality K1', ferramentas: 'berbequim' } })), 'prompt reparação: leva as ferramentas, não a impressora');
 ok(/posição para imprimir/.test(buildPrompt({ modo: 'peca3d', texto: 'x' })) && /onde e em que direção/.test(buildPrompt({ modo: 'peca3d', texto: 'x' })), 'prompt peça 3D: pergunta a força e diz a posição');
 
 // Caber na K1 (220 × 220 × 250)

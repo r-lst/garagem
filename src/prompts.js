@@ -4,6 +4,7 @@ export const MODOS = {
   peca3d: { nome: 'Peça nova para imprimir em 3D', placeholder: 'Ex.: um suporte para pendurar a rebarbadora na parede da oficina, tenho um varão de 25 mm onde vai assentar...', pos: 'Quando o Claude entregar o bloco de código, copia-o, vai a <b>Peça 3D</b> → <b>Importar do Claude</b>, cola e carrega em <b>Construir</b>. Depois guarda o STL.', destino: 'peca' },
   alterar: { nome: 'Alterar uma peça 3D que já tenho', placeholder: 'Ex.: quero um furo de 6 mm no meio da face de cima e uma base mais larga...', pos: 'Carrega primeiro a peça no separador <b>Peça 3D</b> (para o pedido levar as medidas dela). Quando o Claude entregar o bloco de código, vai a <b>Peça 3D</b> → <b>Importar do Claude</b>, marca "Aplicar sobre a peça que está aberta", cola e carrega em <b>Construir</b>.', destino: 'peca' },
   madeira: { nome: 'Projeto de madeira', placeholder: 'Ex.: uma bancada para a oficina com 1,2 m de comprimento, tenho tábuas de pinho de 2,4 m...', pos: 'No fim o Claude entrega um bloco de código. Copia-o, vai a <b>Ver projeto</b>, cola e carrega em <b>Desenhar</b>. Vês o móvel em 3D e a lista de cortes sai sozinha.', destino: 'projeto' },
+  reparacao: { nome: 'Reparar alguma coisa', placeholder: 'Ex.: a torneira da cozinha pinga mesmo fechada; já troquei a borracha e continua...', pos: 'Lê a resposta do Claude. Para a guardares, vai ao <b>Histórico</b> e carrega em <b>Guardar a resposta</b> nesta reparação. Quando estiver resolvida, marca-a como resolvida.', destino: 'historico' },
   plano: { nome: 'Plano de trabalho', placeholder: 'Ex.: quero pintar e montar 6 cadeiras até ao fim do mês...', pos: 'Guarda ou imprime o plano que o Claude entregar.' },
   outro: { nome: 'Não sei bem / outra coisa', placeholder: 'Escreve o que tens em mente, mesmo que seja vago...', pos: 'Responde às perguntas do Claude uma a uma.' },
 };
@@ -61,15 +62,35 @@ REGRAS DO JSON
 - Estrutura: {"nome":"nome do projeto","madeira":"pinho","pecas":[ ... ]}. Uma peça pode ter "madeira" própria.
 - MUITO IMPORTANTE: faz as contas das posições com cuidado. Cada peça tem de tocar nas peças a que está ligada, sem ficar a flutuar e sem atravessar outras. Confirma as contas antes de entregar.`;
 
+// Reparações: sem JSON. O pai junta fotos na conversa do Claude.
+export const AREAS_REPARACAO = ['Canalização', 'Eletricidade', 'Móvel', 'Porta ou janela', 'Eletrodoméstico', 'Outra coisa'];
+
+const REGRAS_REPARACAO = `És um técnico experiente de reparações em casa e na oficina, e vais ajudar-me a perceber e a resolver uma avaria.
+Escreve em português de Portugal, com frases curtas e sem jargão. Se usares uma palavra técnica, explica-a em meia frase.
+
+COMO QUERO QUE TRABALHES
+1. Vou juntar uma ou duas fotos à mensagem. Se não vierem, pede-mas.
+2. Antes de responderes, faz-me as perguntas que faltarem, UMA de cada vez (no máximo 4).
+3. Eletricidade: lembra-me, numa frase, de desligar no quadro o disjuntor desse circuito antes de mexer.
+4. Gás (fogão, esquentador, caldeira, tubos ou cheiro a gás): diz-me só que isto não serve para esse apoio e que, pela gravidade, é para tratar com um técnico de gás. Não dês instruções de reparação.`;
+
+const FORMATO_REPARACAO = `FORMATO DA RESPOSTA FINAL (texto simples, sem blocos de código)
+1. Causas prováveis: até 3, da mais provável para a menos, e como confirmar cada uma.
+2. Dificuldade: fácil, média ou difícil, e quanto tempo leva.
+3. Ferramentas e material, com quantidades. Usa as ferramentas que eu tenho; se faltar alguma, diz a alternativa.
+4. Passos para a causa mais provável, numerados e curtos.
+5. Quando chamar um técnico, e de que tipo.
+Se a reparação não for para fazer em casa, diz-mo logo no início e salta os passos.`;
+
 const FORMATO_PLANO = `FORMATO DA ENTREGA FINAL
 1. Etapas pela ordem certa, cada uma com tempo estimado.
 2. Material a comprar (com quantidades) e ferramentas necessárias.
 3. Riscos ou pontos onde costuma correr mal.
 4. Lista de verificação final.`;
 
-function perfilTexto(p) {
+function perfilTexto(p, { impressora = true } = {}) {
   const l = [];
-  if (p.impressora) l.push(`- Impressora 3D: ${p.impressora}${p.vx ? ` (volume de impressão ${p.vx}×${p.vy}×${p.vz} mm)` : ''}${p.bico ? `, bico ${p.bico} mm` : ''}${p.material ? `, material ${p.material}` : ''}${p.slicer ? `, software de laminação: ${p.slicer}` : ''}`);
+  if (impressora && p.impressora) l.push(`- Impressora 3D: ${p.impressora}${p.vx ? ` (volume de impressão ${p.vx}×${p.vy}×${p.vz} mm)` : ''}${p.bico ? `, bico ${p.bico} mm` : ''}${p.material ? `, material ${p.material}` : ''}${p.slicer ? `, software de laminação: ${p.slicer}` : ''}`);
   if (p.ferramentas?.trim()) l.push(`- Ferramentas e máquinas que tenho: ${p.ferramentas.trim()}`);
   if (p.madeiras?.trim()) l.push(`- Madeiras e materiais que uso habitualmente: ${p.madeiras.trim()}`);
   if (p.notas?.trim()) l.push(`- Outras notas: ${p.notas.trim()}`);
@@ -90,15 +111,17 @@ Ainda não tens as medidas da peça. Pergunta-me o comprimento, a largura e a al
 - O JSON da entrega final só leva as ALTERAÇÕES (add/sub) a aplicar sobre esta peça, nunca a peça inteira. Põe "base":"carregada" no topo do JSON.`;
 }
 
-export function buildPrompt({ modo, texto, perfil = {}, peca = null }) {
-  const partes = [REGRAS];
-  const pt = perfilTexto(perfil);
+export function buildPrompt({ modo, texto, perfil = {}, peca = null, area = '' }) {
+  const partes = [modo === 'reparacao' ? REGRAS_REPARACAO : REGRAS];
+  const pt = perfilTexto(perfil, { impressora: modo !== 'reparacao' });
   if (pt) partes.push(pt);
   if (modo === 'alterar') partes.push(pecaTexto(peca));
-  partes.push(`O QUE QUERO\n${(texto || '').trim() || '(ainda não sei bem; ajuda-me a descobrir, começando por perguntar o essencial)'}`);
+  if (modo === 'reparacao') partes.push(`A AVARIA${area ? `\nÉ sobre: ${area}.` : ''}\n${(texto || '').trim() || '(ainda não descrevi; começa por me perguntar o que se passa)'}`);
+  else partes.push(`O QUE QUERO\n${(texto || '').trim() || '(ainda não sei bem; ajuda-me a descobrir, começando por perguntar o essencial)'}`);
   if (modo === 'peca3d' || modo === 'alterar') partes.push(FORMATO_JSON);
   else if (modo === 'madeira') partes.push(FORMATO_MADEIRA);
   else if (modo === 'plano') partes.push(FORMATO_PLANO);
+  else if (modo === 'reparacao') partes.push(FORMATO_REPARACAO);
   else partes.push('FORMATO DA ENTREGA FINAL\nEscolhe o formato mais útil para o que pedi e explica-o em duas linhas antes de entregar.');
   partes.push('Começa agora pela primeira pergunta.');
   return partes.join('\n\n');

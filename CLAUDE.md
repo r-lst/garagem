@@ -49,10 +49,16 @@ A página só fala com o **Worker da Garagem** (`WORKER_URL`), e só para os uso
 - Sem rede, ou com o Worker em baixo: tudo continua a funcionar e a guardar no aparelho; o Histórico mostra o erro em português.
 
 ## Histórico
-- Entrada: `{id, criado, atualizado, modo, estado:"pedido"|"projeto", texto, pedido, nome, projeto}`. Entram os modos `madeira`, `plano`, `outro` (não os de Peça 3D).
+- Entrada: `{id, criado, atualizado, modo, estado:"pedido"|"projeto"|"resolvida", texto, pedido, nome, projeto, area, resposta}`. Entram os modos `madeira`, `reparacao`, `plano`, `outro` (não os de Peça 3D). `resolvida`, `area` e `resposta` só nas reparações.
 - "pedido" ao chegar ao passo 3; passa a "projeto" ao carregar em **Desenhar** (liga ao último pedido de madeira sem projeto). O exemplo não entra.
 - Apagar deixa `{id, atualizado, apagado:true}`, para a sincronização não ressuscitar o que foi apagado. Juntar: por `id`, ganha o `atualizado` mais recente.
 - Mudar o formato: atualizar `historico.js`, `test-historico.mjs` e manter a leitura das entradas antigas.
+
+## Reparações
+- Tipo `reparacao` no Pedir ao Claude (e cartão no Início). Passo 2: área opcional (`AREAS_REPARACAO`) e "O que se passa?". Passo 3: lembra de juntar fotos na conversa do Claude. A página não vê nem envia as fotos.
+- Pedido em `prompts.js` (`REGRAS_REPARACAO`, `FORMATO_REPARACAO`): texto, sem JSON. Até 3 causas, dificuldade, ferramentas e material, passos, quando chamar um técnico.
+- Segurança, no pedido e só no pedido: eletricidade = uma frase a lembrar o disjuntor desligado no quadro; gás = não serve para isso, é para um técnico de gás. **Sem avisos na página** e sem tom de quem fala para uma criança (decisão do Leston).
+- No Histórico: "Guardar a resposta" (o pai cola o texto do Claude), "Marcar como resolvida" / "Voltar a abrir".
 
 ## Contrato entre os pedidos e os leitores (crítico)
 `prompts.js` ensina o Claude gratuito a produzir JSON, e `shapes.js` / `project.js` leem-no. Têm de mudar juntos.

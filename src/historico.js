@@ -1,10 +1,11 @@
 // Histórico de pedidos e projetos. Lógica pura (sem DOM): guardar, ligar o projeto ao pedido, juntar cópias.
-// Cada entrada: {id, criado, atualizado, modo, estado:'pedido'|'projeto', texto, pedido, nome, projeto}
+// Cada entrada: {id, criado, atualizado, modo, estado:'pedido'|'projeto'|'resolvida', texto, pedido, nome, projeto, area, resposta}
+// 'resolvida' e 'resposta' só nas reparações.
 // Apagar deixa só {id, atualizado, apagado:true}, para a sincronização não ressuscitar o que foi apagado.
 
 export const CHAVE = 'garagem_historico';
 export const MAX = 50;
-export const MODOS_HIST = ['madeira', 'plano', 'outro'];
+export const MODOS_HIST = ['madeira', 'reparacao', 'plano', 'outro'];
 
 const novoId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 const visiveis = (lista) => lista.filter((e) => !e.apagado);
@@ -42,12 +43,12 @@ function limitar(lista, agora) {
  * Regista o pedido do passo 3. Se `id` for de um pedido ainda sem projeto (o pai voltou atrás e mudou), atualiza-o.
  * Devolve {lista, id}.
  */
-export function registarPedido(lista, { id, modo, texto, pedido }, agora = Date.now()) {
+export function registarPedido(lista, { id, modo, texto, pedido, area = '' }, agora = Date.now()) {
   const atual = id && lista.find((e) => e.id === id && !e.apagado && e.estado === 'pedido');
   if (atual) {
-    return { lista: lista.map((e) => (e === atual ? { ...e, modo, texto, pedido, atualizado: agora } : e)), id };
+    return { lista: lista.map((e) => (e === atual ? { ...e, modo, texto, pedido, area, atualizado: agora } : e)), id };
   }
-  const e = { id: novoId(), criado: agora, atualizado: agora, modo, estado: 'pedido', texto, pedido, nome: '', projeto: null };
+  const e = { id: novoId(), criado: agora, atualizado: agora, modo, estado: 'pedido', texto, pedido, nome: '', projeto: null, area };
   return { lista: limitar([...lista, e], agora), id: e.id };
 }
 
@@ -67,6 +68,17 @@ export function registarProjeto(lista, spec, agora = Date.now()) {
   }
   const e = { id: novoId(), criado: agora, atualizado: agora, modo: 'madeira', estado: 'projeto', texto: '', pedido: '', nome, projeto: spec };
   return { lista: limitar([...lista, e], agora), id: e.id, novo: true };
+}
+
+/** Reparação: marcar como resolvida (ou voltar a "pedido"). */
+export function marcarResolvida(lista, id, resolvida = true, agora = Date.now()) {
+  return lista.map((e) => (e.id === id && !e.apagado ? { ...e, estado: resolvida ? 'resolvida' : 'pedido', atualizado: agora } : e));
+}
+
+/** Reparação: guardar o texto da resposta do Claude (vazio apaga). */
+export function guardarResposta(lista, id, texto, agora = Date.now()) {
+  const t = String(texto || '').trim();
+  return lista.map((e) => (e.id === id && !e.apagado ? { ...e, resposta: t, atualizado: agora } : e));
 }
 
 export function apagar(lista, id, agora = Date.now()) {
