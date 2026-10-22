@@ -7,8 +7,13 @@ import * as G from './geo.js';
 import * as PJ from './project.js';
 import { GERADORES, buildSpec, extractJSON } from './shapes.js';
 import { parseLines, planGroups } from './cuts.js';
-import { buildPrompt, MODOS } from './prompts.js';
+import { buildPrompt, MODOS, AREAS_REPARACAO } from './prompts.js';
+import { folhaCortes } from './folha.js';
+import { listasOficina, progresso } from './oficina.js';
 import { icon, fillIcons } from './icons.js';
+import * as H from './historico.js';
+import { sincronizar, lerConfig, gravarConfig, chaveDoLink } from './sync.js';
+import { WORKER_URL } from './config.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -33,7 +38,8 @@ const PERFIL_DEFAULT = { impressora: 'Creality K1', vx: 220, vy: 220, vz: 250, b
 function loadPerfil() {
   try { return { ...PERFIL_DEFAULT, ...JSON.parse(localStorage.getItem('oficina_perfil') || '{}') }; } catch { return { ...PERFIL_DEFAULT }; }
 }
-function savePerfil() { try { localStorage.setItem('oficina_perfil', JSON.stringify(perfil)); } catch { /* sem armazenamento */ } }
+let aoGuardarPerfil = () => {}; // a cópia online liga-se aqui mais abaixo
+function savePerfil() { try { localStorage.setItem('oficina_perfil', JSON.stringify(perfil)); } catch { /* sem armazenamento */ } aoGuardarPerfil(); }
 const perfil = loadPerfil();
 let guardadoT;
 $$('[data-k]').forEach((el) => {
@@ -56,20 +62,32 @@ function equipBanner() {
 equipBanner();
 
 // ================= Navegação =================
-const TABS = ['inicio', 'pedir', 'projeto', 'peca', 'cortes', 'perfil'];
+const TABS = ['inicio', 'pedir', 'projeto', 'peca', 'cortes', 'historico', 'perfil', 'oficina'];
+const telemovel = () => window.matchMedia('(max-width: 700px)').matches;
 let tabAtual = '';
+let oficinaId = null; // projeto aberto no modo oficina (#oficina=<id>)
 function showTab(name) {
+  if (name.startsWith('oficina=')) { oficinaId = name.slice(8); name = 'oficina'; }
   if (!TABS.includes(name)) name = 'inicio';
+  if (name === 'oficina' && !hist.some((e) => e.id === oficinaId && e.projeto && !e.apagado)) name = 'historico';
   tabAtual = name;
-  $$('#tabs a').forEach((b) => b.classList.toggle('on', b.dataset.tab === name));
+  const marca = name === 'oficina' ? 'historico' : name;
+  $$('#tabs a, #barra a').forEach((b) => b.classList.toggle('on', b.dataset.tab === marca));
   $$('.tab').forEach((t) => t.classList.toggle('on', t.id === 'tab-' + name));
+  $('#mais').hidden = true;
   requestAnimationFrame(() => {
     if (name === 'peca') { PV.resize(); if (geo && !fittedOnce) fitPeca(); }
     if (name === 'projeto') { JV.resize(); if (projItems && !projFitted) setView('3d'); }
-    if (name === 'inicio') heroStart(); else heroStop();
+    if (name === 'inicio' && !telemovel()) heroStart(); else heroStop();
   });
+  if (name === 'historico') { renderHist(); agendarSync(100); }
+  if (name === 'inicio') renderContinuar();
+  if (name === 'oficina') { renderOficina(); ligarEcra(); } else desligarEcra();
   window.scrollTo(0, 0);
 }
+$('#mais-abrir').addEventListener('click', () => { $('#mais').hidden = false; });
+$('#mais-fechar').addEventListener('click', () => { $('#mais').hidden = true; });
+$('#mais').addEventListener('click', (e) => { if (e.target === $('#mais') || e.target.closest('a')) $('#mais').hidden = true; });
 window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
 const goto = (name) => { if (location.hash === '#' + name) showTab(name); else location.hash = name; };
 
@@ -164,11 +182,24 @@ const MODO_INFO = {
   peca3d: { i: 'novo', d: 'Suportes, caixas, adaptadores, peças de substituição.' },
   alterar: { i: 'alterar', d: 'Mudar uma peça que já tens em STL: furos, abas, encaixes.' },
   madeira: { i: 'madeira', d: 'Móveis e construções. Vês em 3D e recebes a lista de cortes.' },
+  reparacao: { i: 'reparar', d: 'Uma avaria em casa ou na garagem. Junta uma foto e o Claude ajuda a resolver.' },
   plano: { i: 'plano', d: 'Organizar um trabalho: etapas, materiais e tempos.' },
   outro: { i: 'outro', d: 'Ainda não sabes bem. O Claude ajuda a descobrir.' },
 };
 let modo = null;
-const DESTINO = { projeto: ['#projeto', 'Ir para Ver projeto'], peca: ['#peca', 'Ir para Peça 3D'] };
+let area = '';
+const DESTINO = { projeto: ['#projeto', 'Ir para Ver projeto'], peca: ['#peca', 'Ir para Peça 3D'], historico: ['#historico', 'Ir para o Histórico'] };
+const DICAS = {
+  normal: '<b>Ajuda o Claude se disseres:</b> o que é e para que serve · medidas aproximadas · onde vai ficar · o material que tens. Se não souberes, não faz mal: ele pergunta.',
+  reparacao: '<b>Ajuda o Claude se disseres:</b> o que é · o que acontece e desde quando · o que já experimentaste.',
+};
+$('#areas-chips').innerHTML = AREAS_REPARACAO.map((a) => `<button class="sec" data-area="${esc(a)}">${esc(a)}</button>`).join('');
+$('#areas-chips').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-area]');
+  if (!b) return;
+  area = area === b.dataset.area ? '' : b.dataset.area;
+  $$('#areas-chips button').forEach((x) => x.classList.toggle('on', x.dataset.area === area));
+});
 $('#modos').innerHTML = Object.entries(MODOS).map(([k, m]) => `<button class="tile" data-modo="${k}"><span class="ci">${icon(MODO_INFO[k].i)}</span><span><b>${m.nome}</b><span class="d">${MODO_INFO[k].d}</span></span></button>`).join('');
 function setStep(n) {
   $$('#stepper li').forEach((li) => { const s = Number(li.dataset.s); li.className = s === n ? 'on' : s < n ? 'feito' : ''; });
@@ -189,23 +220,42 @@ $('#modos').addEventListener('click', (e) => {
   $('#escolhido').innerHTML = `<span class="ci">${icon(MODO_INFO[modo].i)}</span><b>${MODOS[modo].nome}</b><button class="sec" id="mudar-tipo">Mudar</button>`;
   $('#mudar-tipo').addEventListener('click', () => setStep(1));
   $('#pedido').placeholder = MODOS[modo].placeholder;
+  const rep = modo === 'reparacao';
+  $('#areas').hidden = !rep;
+  $('#pedido-l').textContent = rep ? 'O que se passa?' : 'O que queres?';
+  $('#pedido-dicas').innerHTML = rep ? DICAS.reparacao : DICAS.normal;
   avisoPeca();
   setStep(2);
   setTimeout(() => $('#pedido').focus(), 300);
 });
 $('#voltar1').addEventListener('click', () => setStep(1));
 $('#voltar2').addEventListener('click', () => setStep(2));
-$('#novo-pedido').addEventListener('click', () => { $('#pedido').value = ''; setStep(1); });
+$('#novo-pedido').addEventListener('click', () => { $('#pedido').value = ''; pedidoAtualId = null; area = ''; $$('#areas-chips button').forEach((x) => x.classList.remove('on')); setStep(1); });
+$('#cartao-reparar').addEventListener('click', (e) => {
+  e.preventDefault();
+  goto('pedir');
+  $('[data-modo="reparacao"]').click();
+});
 $('#criar').addEventListener('click', () => {
   const texto = $('#pedido').value;
   if (!texto.trim() && !confirm('Não escreveste nada. Queres criar o pedido na mesma?')) return;
-  $('#saida').value = buildPrompt({ modo, texto, perfil, peca: modo === 'alterar' ? partInfo() : null });
+  const rep = modo === 'reparacao';
+  const areaPedido = rep ? area : '';
+  $('#saida').value = buildPrompt({ modo, texto, perfil, peca: modo === 'alterar' ? partInfo() : null, area: areaPedido });
+  $('#colar-t').textContent = rep ? 'Colar, juntar as fotos e enviar' : 'Colar e enviar';
+  $('#colar-foto').hidden = !rep;
+  $('#foto-como').hidden = !rep;
   $('#pos-passos').innerHTML = MODOS[modo].pos;
   const d = DESTINO[MODOS[modo].destino];
   const ir = $('#ir-destino');
   ir.hidden = !d;
   if (d) { ir.href = d[0]; ir.innerHTML = icon('seta') + d[1]; }
   $('#copiado').hidden = true;
+  if (H.MODOS_HIST.includes(modo)) {
+    const r = H.registarPedido(hist, { id: pedidoAtualId, modo, texto, pedido: $('#saida').value, area: areaPedido });
+    pedidoAtualId = r.id;
+    setHist(r.lista);
+  }
   setStep(3);
 });
 $('#copiar').addEventListener('click', async () => {
@@ -274,6 +324,7 @@ let mesh = null;
 let previewMesh = null;
 let previewMode = null;
 let fittedOnce = false;
+let faixaInfo = null; // {titulo, linhas}: a peça foi rodada pela app (faixa amarela com Desfazer)
 const history = [];
 const matPrev = new THREE.MeshBasicMaterial({ color: 0xe11d48, transparent: true, opacity: 0.42, depthWrite: false });
 
@@ -292,34 +343,110 @@ function partInfo() {
   const b = G.bbox(geo);
   return { sx: b.size.x, sy: b.size.y, sz: b.size.z, minx: b.min.x, maxx: b.max.x, miny: b.min.y, maxy: b.max.y, minz: b.min.z, maxz: b.max.z };
 }
-function fitReport(size) {
-  const lim = [bed().x, bed().y, bed().z];
-  const dims = [size.x, size.y, size.z];
-  const per = dims.map((d, i) => d <= lim[i] + 1e-6);
-  const ok = per.every(Boolean);
-  let tip = '';
-  if (!ok) {
-    const perms = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
-    tip = perms.find((p) => p.every((di, i) => dims[di] <= lim[i])) ? 'Cabe se rodares a peça (secção "Rodar").' : 'Não cabe em nenhuma posição. Corta-a em partes (secção "Cortar") ou reduz o tamanho.';
+// ---------- caber na impressora ----------
+const CURTO = { x: 'comprimento', y: 'largura', z: 'altura' };
+const mm = (v) => fmt(v, Math.abs(v) < 10 ? 1 : 0) + ' mm';
+const nomeImp = () => perfil.impressora || 'impressora';
+const solucoes = new WeakMap();
+/** Posição em que a peça cabe (ver G.rodarParaCaber), guardada por peça e por volume de impressão. */
+function solucao(g) {
+  const k = Object.values(bed()).join('×');
+  const c = solucoes.get(g);
+  if (c && c.k === k) return c.r;
+  const r = G.rodarParaCaber(g, bed());
+  solucoes.set(g, { k, r });
+  return r;
+}
+function renderFaixa(exc) {
+  const el = $('#faixa-k1');
+  if (!geo || (!faixaInfo && !exc.length)) { el.hidden = true; return; }
+  el.hidden = false;
+  if (faixaInfo) {
+    el.className = 'faixa-k1 info';
+    el.innerHTML = `<b>${icon('certo')}${esc(faixaInfo.titulo)}</b>${faixaInfo.linhas.map((l) => `<span>${esc(l)}</span>`).join('')}<div class="row"><button class="sec" data-faixa="desfazer">${icon('desfazer')}Desfazer</button></div>`;
+    return;
   }
-  return { per, ok, tip, lim };
+  const sol = solucao(geo);
+  el.className = 'faixa-k1 erro-k1';
+  el.innerHTML = `<b>✗ ${sol ? 'Não cabe na' : 'A peça excede o tamanho da'} ${esc(nomeImp())}</b>`
+    + exc.map((e) => `<span>${e.nome}: ${mm(e.medida)} — o máximo é ${mm(e.max)} (${mm(e.aMais)} a mais)</span>`).join('')
+    + (sol ? `<div class="row"><button data-faixa="rodar">${icon('enquadrar')}Rodar para caber</button></div>`
+      : '<span>Não cabe em nenhuma posição. Reduz o tamanho em "Medidas e tamanho" ou corta-a em partes em "Cortar a peça".</span>');
+}
+$('#faixa-k1').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-faixa]');
+  if (!b) return;
+  if (b.dataset.faixa === 'desfazer') $('#desfazer').click();
+  else rodarParaCaber('Peça rodada para caber.');
+});
+/** Roda a peça aberta para caber, se houver posição. Devolve true se rodou. */
+function rodarParaCaber(msg) {
+  if (!geo) return false;
+  const s = solucao(geo);
+  if (!s || !s.como) return false;
+  setGeo(s.geo, msg, { fit: true });
+  faixaInfo = { titulo: `Rodei a peça para caber na ${nomeImp()}.`, linhas: [s.como] };
+  refreshAxisUI(true);
+  updateInfo();
+  return true;
+}
+const cm2 = (a) => (a < 100 ? 'quase nenhuns' : `~${fmt(a / 100, 0)} cm²`);
+$('#melhor-pos').addEventListener('click', () => {
+  if (!geo) { toast('Abre ou cria uma peça primeiro.', true); return; }
+  later(() => {
+    const r = G.melhorPosicao(geo, bed());
+    if (!r) { toast(`A peça não cabe na ${nomeImp()} em nenhuma posição.`, true); return; }
+    if (!r.mudou) { toast('Já está na melhor posição para imprimir.'); return; }
+    const { antes: a, depois: d } = r;
+    setGeo(r.geo, 'Peça na melhor posição para imprimir.', { fit: true });
+    faixaInfo = { titulo: 'Pus a peça na melhor posição para imprimir.', linhas: [
+      `Suportes: ${cm2(d.suporte)} (antes ${cm2(a.suporte)})`,
+      `Face na mesa: ${fmt(d.base / 100, 0)} cm² (antes ${fmt(a.base / 100, 0)} cm²)`,
+      ...(Math.abs(d.altura - a.altura) > 0.5 ? [`Altura: ${mm(d.altura)} (antes ${mm(a.altura)})`] : []),
+      'Se o Claude recomendou outra posição por causa da força, usa Desfazer.',
+    ] };
+    refreshAxisUI(true);
+    updateInfo();
+  });
+});
+/** Chamado quando a peça entra (abrir, criar, importar): roda sozinha se não couber e houver posição. */
+function rodarAoEntrar() {
+  if (!geo || !G.excessos(G.bbox(geo).size, bed()).length) return;
+  // no telemóvel a faixa fica no topo e o pai está no formulário: a mensagem em baixo também avisa
+  if (rodarParaCaber(`Rodei a peça para caber na ${nomeImp()}. Vê o aviso por cima do desenho.`)) return;
+  toast(`A peça não cabe na ${nomeImp()}. Vê o aviso por cima do desenho.`, true);
+}
+function avisoMedidas() {
+  const el = $('#aviso-medidas');
+  const t = { x: val($('#mx')), y: val($('#my')), z: val($('#mz')) };
+  const exc = Object.values(t).every((v) => v > 0) ? G.excessos(t, bed()) : [];
+  el.className = 'aviso' + (exc.length ? ' on' : '');
+  el.innerHTML = exc.length ? `<span class="bad">✗</span> Com estas medidas não cabe na ${esc(nomeImp())}: ${exc.map((e) => `${CURTO[e.eixo]} ${mm(e.medida)}, máximo ${mm(e.max)}`).join('; ')}.` : '';
 }
 function updateInfo() {
   const el = $('#info');
   $('#vazio').style.display = geo ? 'none' : 'flex';
-  if (!geo) { el.innerHTML = '<span class="muted">Sem peça aberta.</span>'; return; }
+  if (!geo) { el.innerHTML = '<span class="muted">Sem peça aberta.</span>'; renderFaixa([]); $('#aviso-guardar').hidden = true; return; }
   const b = G.bbox(geo);
   const s = G.stats(geo);
-  const f = fitReport(b.size);
-  if (volLines) { volLines.material.color.set(f.ok ? 0xc2561b : 0xe11d48); volLines.material.opacity = f.ok ? 0.45 : 0.9; }
-  const row = (nome, v, i) => `<tr><td>${nome}</td><td><b>${fmt(v)} mm</b></td><td class="muted">${fmt(f.lim[i], 0)} mm</td><td class="${f.per[i] ? 'ok' : 'bad'}">${f.per[i] ? '✓' : '✗'}</td></tr>`;
+  const lim = bed();
+  const exc = G.excessos(b.size, lim);
+  const ok = !exc.length;
+  const falha = Object.fromEntries(exc.map((e) => [e.eixo, e]));
+  if (volLines) { volLines.material.color.set(ok ? 0xc2561b : 0xe11d48); volLines.material.opacity = ok ? 0.45 : 0.9; }
+  const row = (nome, e) => `<tr><td>${nome}</td><td><b>${fmt(b.size[e])} mm</b></td><td class="muted">${fmt(lim[e], 0)} mm</td><td class="${falha[e] ? 'bad' : 'ok'}">${falha[e] ? '✗ +' + mm(falha[e].aMais) : '✓'}</td></tr>`;
   el.innerHTML = `<table><tr><th>Eixo</th><th>Medida</th><th>Máx. ${esc(perfil.impressora || '')}</th><th></th></tr>
-    ${row('Comprimento X', b.size.x, 0)}${row('Largura Y', b.size.y, 1)}${row('Altura Z', b.size.z, 2)}</table>
-    ${f.ok ? '<div class="ok">✓ Cabe na impressora</div>' : `<div class="bad">✗ Não cabe. ${f.tip}</div>`}
+    ${row('Comprimento X', 'x')}${row('Largura Y', 'y')}${row('Altura Z', 'z')}</table>
+    ${ok ? '<div class="ok">✓ Cabe na impressora</div>' : `<div class="bad">${solucao(geo) ? '✗ Não cabe. Usa "Rodar para caber", por cima do desenho.' : '✗ Não cabe em nenhuma posição.'}</div>`}
     <div class="muted" style="margin-top:6px">Volume ${fmt(s.volume / 1000, 1)} cm³ (≈ ${fmt((s.volume / 1000) * 1.24 * 0.35, 0)} g de PLA com 20% de enchimento) · ${s.closed ? '✓ malha fechada' : '✗ malha com buracos: cortes e furos podem falhar'}</div>`;
+  renderFaixa(exc);
+  const ag = $('#aviso-guardar');
+  ag.hidden = ok;
+  ag.textContent = ok ? '' : `✗ Esta peça não cabe na ${nomeImp()} (${exc.map((e) => `${CURTO[e.eixo]} ${mm(e.medida)}, máximo ${mm(e.max)}`).join('; ')}).`;
   if (!$('#painel').contains(document.activeElement)) syncMedidas();
 }
 function syncMedidas() {
+  $('#aviso-medidas').className = 'aviso';
   if (!geo) return;
   const b = G.bbox(geo);
   $('#mx').value = Math.round(b.size.x * 100) / 100;
@@ -334,6 +461,7 @@ function showMesh() {
   PV.scene.add(mesh);
 }
 function setGeo(g, msg, { fit = false, noHistory = false } = {}) {
+  faixaInfo = null;
   if (geo && !noHistory) { history.push(geo); if (history.length > 30) history.shift(); }
   geo = g;
   showMesh();
@@ -349,6 +477,7 @@ function setGeo(g, msg, { fit = false, noHistory = false } = {}) {
 }
 $('#desfazer').addEventListener('click', () => {
   if (!history.length) return;
+  faixaInfo = null;
   geo = history.pop();
   showMesh();
   previewMode = null;
@@ -423,6 +552,7 @@ async function loadFile(file) {
     setGeo(g, `Aberto: ${file.name}`, { fit: true, noHistory: true });
     refreshAxisUI(true);
     $('#desfazer').disabled = true;
+    rodarAoEntrar();
   } catch (e) {
     console.error(e);
     toast('Não consegui abrir o ficheiro: ' + (e.message || e), true);
@@ -451,6 +581,7 @@ $('#gerar').addEventListener('click', () => later(() => {
     $('#nome-saida').value = gerSel.value + '.stl';
     setGeo(out, 'Peça criada.', { fit: true });
     refreshAxisUI(true);
+    rodarAoEntrar();
   } catch (e) { toast(e.message || String(e), true); }
 }));
 $('#construir').addEventListener('click', () => {
@@ -469,6 +600,7 @@ $('#construir').addEventListener('click', () => {
       }
       setGeo(out, usarBase ? 'Alterações aplicadas.' : 'Peça construída.', { fit: !usarBase });
       refreshAxisUI(true);
+      if (!usarBase) rodarAoEntrar();
     } catch (e) {
       erro.textContent = e.message || String(e);
       erro.className = 'erro on';
@@ -486,7 +618,7 @@ function onMedida(changed) {
   const k = v / base[changed];
   for (const id of ['mx', 'my', 'mz']) if (id !== changed) $('#' + id).value = Math.round(base[id] * k * 100) / 100;
 }
-['mx', 'my', 'mz'].forEach((id) => $('#' + id).addEventListener('input', () => onMedida(id)));
+['mx', 'my', 'mz'].forEach((id) => $('#' + id).addEventListener('input', () => { onMedida(id); avisoMedidas(); }));
 $('#aplicar-medidas').addEventListener('click', () => run('Medidas aplicadas.', (g) => {
   const b = G.bbox(g).size;
   const t = [val($('#mx')), val($('#my')), val($('#mz'))];
@@ -800,22 +932,26 @@ JV.renderer.domElement.addEventListener('pointerup', (e) => {
   else if (projSel) selectKey(projSel);
 });
 
-function readProj() {
+function readProj(registar = true) {
   const erro = $('#proj-erro');
   erro.className = 'erro';
   try {
     const spec = extractJSON($('#proj-json').value);
     if (spec.operacoes && !spec.pecas) throw new Error('Isto é uma peça para impressão 3D. Cola-a em "Peça 3D" → "Importar do Claude".');
     showProject(spec);
-    toast('Projeto desenhado.');
+    if (registar) {
+      const r = H.registarProjeto(hist, spec);
+      if (r.lista !== hist) setHist(r.lista);
+      toast('Projeto desenhado. Ficou guardado no Histórico.');
+    } else toast('Projeto desenhado.');
   } catch (e) {
     console.error(e);
     erro.textContent = e.message || String(e);
     erro.className = 'erro on';
   }
 }
-$('#proj-desenhar').addEventListener('click', () => later(readProj));
-const verExemplo = () => { $('#proj-json').value = JSON.stringify(PJ.EXEMPLO_PROJETO, null, 1); later(readProj); };
+$('#proj-desenhar').addEventListener('click', () => later(() => readProj(true)));
+const verExemplo = () => { $('#proj-json').value = JSON.stringify(PJ.EXEMPLO_PROJETO, null, 1); later(() => readProj(false)); };
 $('#proj-exemplo').addEventListener('click', verExemplo);
 $('#proj-exemplo2').addEventListener('click', verExemplo);
 
@@ -823,9 +959,22 @@ $('#proj-cortes').addEventListener('click', () => {
   if (!projCortes) return;
   $('#t-unid').value = '1';
   $('#t-lista').value = PJ.cutListText(projCortes);
-  cortesExtra = { placas: projCortes.placas, ferragens: projCortes.ferragens, nome: projData.nome };
+  cortesExtra = extraDoProjeto();
   goto('cortes');
   setTimeout(() => $('#calcular').click(), 60);
+});
+function extraDoProjeto() {
+  const s = projBox.getSize(new THREE.Vector3());
+  return { placas: projCortes.placas, ferragens: projCortes.ferragens, nome: projData.nome, madeira: projData.madeira || '', medidas: [s.x, s.y, s.z] };
+}
+$('#proj-folha').addEventListener('click', () => {
+  if (!projCortes) { toast('Desenha um projeto primeiro.', true); return; }
+  try {
+    // comprimento da tábua, serra e aparo: os do separador Cortes
+    const { groups } = parseLines(PJ.cutListText(projCortes), 1);
+    const plans = planGroups(groups, { board: val($('#t-comp')) * Number($('#t-unid').value), kerf: val($('#t-serra')) || 0, trim: val($('#t-aparo')) || 0 });
+    imprimirFolha(plans, 1, extraDoProjeto());
+  } catch (e) { toast(e.message || String(e), true); }
 });
 
 $('#proj-imagem').addEventListener('click', () => {
@@ -908,6 +1057,12 @@ $('#calcular').addEventListener('click', () => {
     erro.className = 'erro on';
   }
 });
+function imprimirFolha(plans, f, extra) {
+  $('#folha').innerHTML = folhaCortes({ titulo: extra?.nome || '', medidas: extra?.medidas || null, madeira: extra?.madeira || '', plans, f, extra });
+  document.body.classList.add('a-imprimir');
+  window.print();
+}
+window.addEventListener('afterprint', () => document.body.classList.remove('a-imprimir'));
 function renderPlans(plans, f) {
   const u = f === 10 ? 'cm' : 'mm';
   const show = (mm) => fmt(mm / f, f === 10 ? 1 : 0);
@@ -937,13 +1092,317 @@ function renderPlans(plans, f) {
   if (plans[0].kerf > 0) h += `<p class="muted">Contado o corte da serra (${fmt(plans[0].kerf, 1)} mm) entre peças.</p>`;
   if (cortesExtra?.placas?.length) h += `<h3>Também precisas (placas e peças largas)</h3><table class="lista"><tr><th>Peça</th><th>Medidas</th><th>Qtd</th></tr>${cortesExtra.placas.map((p) => `<tr><td>${esc(p.nome)}${p.recorte ? ' (recortar)' : ''}</td><td>${fmt(p.comprimento, 0)} × ${fmt(p.largura, 0)} × ${fmt(p.espessura, 0)} mm</td><td>${p.qty}</td></tr>`).join('')}</table>`;
   if (cortesExtra?.ferragens?.length) h += `<h3>Ferragens</h3><table class="lista">${cortesExtra.ferragens.map((p) => `<tr><td>${esc(p.nome)}</td><td>${p.qty}</td></tr>`).join('')}</table><p class="muted">Só as ferragens que o Claude desenhou. Confirma na lista de materiais dele.</p>`;
-  h += `<div class="row no-print"><button id="imprimir" class="sec">${icon('imprimir')}Imprimir</button></div>`;
+  h += `<div class="row no-print"><button id="imprimir" class="sec">${icon('imprimir')}Imprimir folha de cortes</button></div>`;
   const out = $('#t-saida');
   out.innerHTML = h;
   out.hidden = false;
-  $('#imprimir').addEventListener('click', () => window.print());
+  const extra = cortesExtra;
+  $('#imprimir').addEventListener('click', () => imprimirFolha(plans, f, extra));
   out.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+
+// ================= Histórico =================
+const LS = { getItem(k) { try { return localStorage.getItem(k); } catch { return null; } }, setItem(k, v) { localStorage.setItem(k, v); } };
+let hist = H.carregar(LS);
+let pedidoAtualId = null;
+const NOMES_MODO = Object.fromEntries(Object.entries(MODOS).map(([k, m]) => [k, m.nome]));
+const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const quando = (t) => { const d = new Date(t), p = (n) => String(n).padStart(2, '0'); return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}, ${p(d.getHours())}:${p(d.getMinutes())}`; };
+
+function setHist(lista) {
+  hist = lista;
+  if (!H.guardar(LS, hist)) toast('Não consegui guardar o histórico neste browser.', true);
+  renderHist();
+  agendarSync();
+}
+let editarResposta = null; // id da reparação ou projeto cuja resposta está a ser escrita
+let abrirResposta = null; // id cuja resposta abre (e para onde se desce) no próximo desenho do Histórico
+function renderHist() {
+  const lista = H.ordenados(hist);
+  // a sincronização pode redesenhar enquanto o pai escreve: guardar o rascunho
+  const rascunho = editarResposta ? $(`#resp-${editarResposta}`)?.value : null;
+  if (!lista.length) {
+    $('#hist-lista').innerHTML = `<div class="bloco hist-vazio"><span class="ci">${icon('historico')}</span><div><p>Ainda não há pedidos. Quando fizeres um pedido de madeira, uma reparação, um plano de trabalho ou "outra coisa", aparece aqui.</p><a class="btn" href="#pedir">${icon('pedir')}Fazer um pedido</a></div></div>`;
+    return;
+  }
+  $('#hist-lista').innerHTML = lista.map((e) => {
+    const rep = e.modo === 'reparacao';
+    const comResposta = rep || e.modo === 'madeira';
+    const prog = e.estado === 'projeto' ? progressoCortes(e) : null;
+    const pronto = e.estado === 'projeto' || e.estado === 'resolvida';
+    const estado = e.estado === 'projeto' ? 'Projeto pronto' : e.estado === 'resolvida' ? 'Resolvida' : 'Pedido feito';
+    const texto = String(e.texto || '').trim();
+    const resposta = String(e.resposta || '');
+    const editar = editarResposta === e.id;
+    return `<article class="hist-item" data-id="${esc(e.id)}">
+      <div class="hist-top"><span class="ci">${icon(MODO_INFO[e.modo]?.i || 'outro')}</span>
+        <div class="hist-tit"><h3>${esc(H.titulo(e, NOMES_MODO))}</h3><p class="muted">${esc(quando(e.criado))} · ${esc(NOMES_MODO[e.modo] || '')}${e.area ? ' · ' + esc(e.area) : ''}${prog && prog.feitos ? ` · ${prog.feitos} de ${prog.total} cortes feitos` : ''}</p></div>
+        <span class="estado ${pronto ? 'pronto' : ''}">${pronto ? icon('certo') : ''}${estado}</span></div>
+      ${texto && (e.estado === 'projeto' || texto.length > 60) ? `<p class="hist-texto">«${esc(texto)}»</p>` : ''}
+      ${comResposta && resposta && !editar ? `<details class="hist-resposta"${abrirResposta === e.id ? ' open' : ''}><summary>Resposta do Claude</summary><div>${esc(resposta)}</div></details>` : ''}
+      ${editar ? `<label class="q-peq" for="resp-${esc(e.id)}">Cola aqui a resposta do Claude</label><textarea id="resp-${esc(e.id)}" rows="8">${esc(rascunho ?? resposta)}</textarea>
+        <div class="row"><button data-acao="resp-guardar">${icon('guardar')}Guardar a resposta</button><button class="sec" data-acao="resp-cancelar">Cancelar</button></div>` : `<div class="row">
+        ${e.estado === 'projeto' ? `<button data-acao="oficina">${icon('oficina')}Abrir na oficina</button><button class="sec so-pc" data-acao="ver">${icon('projeto')}Ver em 3D</button>` : ''}
+        ${e.pedido ? `<button class="sec" data-acao="copiar">${icon('copiar')}Copiar o pedido</button>` : ''}
+        ${comResposta ? `<button class="sec" data-acao="resp-editar">${icon('colar')}${resposta ? 'Mudar a resposta' : 'Guardar a resposta'}</button>` : ''}
+        ${rep ? `<button class="sec" data-acao="resolvida">${icon('certo')}${e.estado === 'resolvida' ? 'Voltar a abrir' : 'Marcar como resolvida'}</button>` : ''}
+        <button class="sec" data-acao="apagar">${icon('apagar')}Apagar</button>
+      </div>`}</article>`;
+  }).join('');
+  if (editarResposta && rascunho == null) $(`#resp-${editarResposta}`)?.focus();
+  if (abrirResposta) { $(`.hist-item[data-id="${abrirResposta}"]`)?.scrollIntoView({ block: 'start' }); abrirResposta = null; }
+  renderContinuar();
+  if (tabAtual === 'oficina') renderOficina();
+}
+async function copiarTexto(txt) {
+  try { await navigator.clipboard.writeText(txt); return true; } catch { /* método antigo */ }
+  const ta = document.createElement('textarea');
+  ta.value = txt;
+  ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  let done = false;
+  try { done = document.execCommand('copy'); } catch { /* nada */ }
+  ta.remove();
+  return done;
+}
+$('#hist-lista').addEventListener('click', async (ev) => {
+  const b = ev.target.closest('[data-acao]');
+  if (!b) return;
+  const e = hist.find((x) => x.id === b.closest('[data-id]').dataset.id);
+  if (!e) return;
+  if (b.dataset.acao === 'oficina') {
+    location.hash = 'oficina=' + e.id;
+  } else if (b.dataset.acao === 'ver') {
+    $('#proj-json').value = JSON.stringify(e.projeto, null, 1);
+    goto('projeto');
+    later(() => readProj(false));
+  } else if (b.dataset.acao === 'copiar') {
+    if (await copiarTexto(e.pedido)) toast('Pedido copiado. Cola-o no Claude com Ctrl + V.');
+    else toast('Não consegui copiar. Faz o pedido outra vez em "Pedir ao Claude".', true);
+  } else if (b.dataset.acao === 'resp-editar') {
+    editarResposta = e.id;
+    renderHist();
+  } else if (b.dataset.acao === 'resp-cancelar') {
+    editarResposta = null;
+    renderHist();
+  } else if (b.dataset.acao === 'resp-guardar') {
+    const txt = $(`#resp-${e.id}`).value;
+    editarResposta = null;
+    setHist(H.guardarResposta(hist, e.id, txt));
+    toast(txt.trim() ? 'Resposta guardada.' : 'Resposta apagada.');
+  } else if (b.dataset.acao === 'resolvida') {
+    const fica = e.estado !== 'resolvida';
+    setHist(H.marcarResolvida(hist, e.id, fica));
+    toast(fica ? 'Marcada como resolvida.' : 'Voltou a ficar aberta.');
+  } else if (b.dataset.acao === 'apagar') {
+    if (!confirm(`Apagar "${H.titulo(e, NOMES_MODO)}" do histórico?`)) return;
+    if (pedidoAtualId === e.id) pedidoAtualId = null;
+    setHist(H.apagar(hist, e.id));
+    toast('Apagado.');
+  }
+});
+
+// ---------- modo oficina ----------
+const listasCache = new Map();
+/** Listas do modo oficina de um projeto, com o comprimento de tábua, serra e aparo do separador Cortes. */
+function listasDe(e) {
+  const opts = { board: (val($('#t-comp')) || 2400) * Number($('#t-unid').value), kerf: val($('#t-serra')) || 0, trim: val($('#t-aparo')) || 0 };
+  const k = JSON.stringify([e.projeto, opts]);
+  if (!listasCache.has(k)) {
+    try { listasCache.set(k, listasOficina(e.projeto, opts)); } catch { listasCache.set(k, null); }
+  }
+  return listasCache.get(k);
+}
+function progressoCortes(e) {
+  const l = listasDe(e);
+  return l ? progresso(l.cortar.flatMap((g) => g.itens), e.oficina?.cortar) : null;
+}
+let ofVista = 'cortar';
+function linhaOficina(tipo, chave, feito, nome, sub, med, medSub) {
+  return `<button class="of-linha${feito ? ' feito' : ''}" data-tipo="${tipo}" data-chave="${esc(chave)}" aria-pressed="${feito}">
+    <span class="of-cx">${feito ? icon('certo') : ''}</span>
+    <span class="of-nome">${esc(nome)}${sub ? `<small>${esc(sub)}</small>` : ''}</span>
+    <span class="of-med">${esc(med)}${medSub ? `<small>${esc(medSub)}</small>` : ''}</span></button>`;
+}
+function renderOficina() {
+  const e = hist.find((x) => x.id === oficinaId && !x.apagado);
+  const l = e && listasDe(e);
+  if (!l) { $('#of-nome').textContent = 'Projeto'; $('#of-corpo').innerHTML = '<p class="erro on">Não consegui ler este projeto.</p>'; return; }
+  const rc = e.oficina?.cortar || {}, rb = e.oficina?.comprar || {};
+  const pc = progresso(l.cortar.flatMap((g) => g.itens), rc), pb = progresso(l.comprar, rb);
+  $('#of-nome').textContent = l.nome;
+  $('#of-sub').textContent = [l.medidas.map((v) => fmt(v, 0)).join(' × ') + ' mm', l.madeira, wake ? 'ecrã sempre ligado' : ''].filter(Boolean).join(' · ');
+  const nomes = { cortar: `Cortar ${pc.feitos}/${pc.total}`, comprar: `Comprar ${pb.feitos}/${pb.total}`, montar: 'Montar' };
+  $$('#of-seg button').forEach((b) => { b.classList.toggle('on', b.dataset.v === ofVista); b.textContent = nomes[b.dataset.v]; });
+  let h = '';
+  if (ofVista === 'cortar') {
+    for (const g of l.cortar) {
+      h += `<h3 class="of-grupo">${esc(g.grupo)}</h3>`;
+      // o que já foi cortado desce para o fim do grupo
+      for (const i of [...g.itens].sort((a, b) => (rc[a.chave] ? 1 : 0) - (rc[b.chave] ? 1 : 0))) h += linhaOficina('cortar', i.chave, !!rc[i.chave], i.nome, i.recorte ? 'recortar' : '', i.medida, `× ${i.qty}`);
+    }
+  } else if (ofVista === 'comprar') {
+    for (const i of [...l.comprar].sort((a, b) => (rb[a.chave] ? 1 : 0) - (rb[b.chave] ? 1 : 0))) h += linhaOficina('comprar', i.chave, !!rb[i.chave], i.texto, '', i.qtd, '');
+  } else {
+    h = e.resposta ? `<div class="bloco of-montar">${esc(e.resposta)}</div>`
+      : `<div class="bloco of-vazio"><p>Ainda não guardaste a resposta do Claude com os passos de montagem.</p><button data-acao-of="guardar-resposta">${icon('colar')}Guardar a resposta</button></div>`;
+  }
+  $('#of-corpo').innerHTML = h;
+}
+$('#of-seg').addEventListener('click', (ev) => { const b = ev.target.closest('[data-v]'); if (b) { ofVista = b.dataset.v; renderOficina(); } });
+$('#of-corpo').addEventListener('click', (ev) => {
+  const b = ev.target.closest('.of-linha');
+  if (b) {
+    const e = hist.find((x) => x.id === oficinaId);
+    const feito = !(e.oficina?.[b.dataset.tipo] || {})[b.dataset.chave];
+    setHist(H.marcarOficina(hist, oficinaId, b.dataset.tipo, b.dataset.chave, feito));
+    return;
+  }
+  if (ev.target.closest('[data-acao-of="guardar-resposta"]')) { editarResposta = oficinaId; abrirResposta = oficinaId; goto('historico'); }
+});
+// ecrã sempre ligado no modo oficina (se o browser deixar)
+let wake = null;
+async function ligarEcra() {
+  if (wake || !navigator.wakeLock) return;
+  try {
+    wake = await navigator.wakeLock.request('screen');
+    wake.addEventListener('release', () => { wake = null; if (tabAtual === 'oficina') renderOficina(); });
+    if (tabAtual === 'oficina') renderOficina();
+  } catch { wake = null; }
+}
+function desligarEcra() { if (wake) { wake.release().catch(() => {}); wake = null; } }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && tabAtual === 'oficina') ligarEcra(); });
+
+// ---------- Início no telemóvel: Continuar ----------
+function renderContinuar() {
+  const vis = H.ordenados(hist);
+  const proj = vis.filter((e) => e.estado === 'projeto').sort((a, b) => b.atualizado - a.atualizado)
+    .find((e) => { const p = progressoCortes(e); return p && p.feitos < p.total; });
+  const reps = vis.filter((e) => e.modo === 'reparacao' && e.estado !== 'resolvida').slice(0, 2);
+  let h = proj || reps.length ? '<h2>Continuar</h2>' : '<h2>O que vamos fazer?</h2>';
+  if (proj) {
+    const p = progressoCortes(proj);
+    h += `<div class="cont-cartao"><h3>${icon('madeira')}${esc(H.titulo(proj, NOMES_MODO))}</h3><p>${p.feitos} de ${p.total} cortes feitos</p><a class="btn grande" href="#oficina=${esc(proj.id)}">${icon('oficina')}Abrir na oficina</a></div>`;
+  }
+  for (const r of reps) {
+    h += `<div class="cont-cartao"><h3>${icon('reparar')}${esc(H.titulo(r, NOMES_MODO))}</h3><p>Por resolver${r.area ? ' · ' + esc(r.area) : ''}</p><button class="sec grande" data-cont="${esc(r.id)}">${r.resposta ? 'Ver a resposta' : 'Abrir'}</button></div>`;
+  }
+  h += `<div class="cont-botoes"><a class="btn grande" href="#pedir">${icon('pedir')}Fazer um pedido</a><button class="sec grande" data-cont="reparar">${icon('reparar')}Reparar</button></div>`;
+  $('#continuar').innerHTML = h;
+}
+$('#continuar').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-cont]');
+  if (!b) return;
+  if (b.dataset.cont === 'reparar') { goto('pedir'); $('[data-modo="reparacao"]').click(); return; }
+  abrirResposta = b.dataset.cont;
+  goto('historico');
+});
+
+$('#hist-exportar').addEventListener('click', () => {
+  const dia = new Date().toISOString().slice(0, 10);
+  download(JSON.stringify(H.exportar({ perfil, historico: hist }), null, 1), `garagem-copia-${dia}.json`, 'application/json');
+  toast('Cópia guardada na pasta Transferências.');
+});
+$('#hist-importar').addEventListener('change', async (ev) => {
+  const f = ev.target.files[0];
+  ev.target.value = '';
+  if (!f) return;
+  try {
+    const imp = H.importar(await f.text());
+    if (!confirm('Recuperar esta cópia? O equipamento passa a ser o da cópia, e os pedidos da cópia juntam-se aos que já estão aqui.')) return;
+    if (imp.perfil) { aplicarPerfil(imp.perfil); savePerfil(); }
+    setHist(H.juntar(hist, imp.historico));
+    toast('Cópia recuperada.');
+  } catch (e) { toast(e.message || String(e), true); }
+});
+
+function aplicarPerfil(p) {
+  for (const k of Object.keys(perfil)) delete perfil[k];
+  Object.assign(perfil, PERFIL_DEFAULT, p);
+  $$('[data-k]').forEach((el) => (el.value = perfil[el.dataset.k] ?? ''));
+  matPeca.color.set(perfil.corPLA);
+  marcarCor(); drawBed(); updateInfo(); equipBanner();
+}
+
+// ---------- cópia online (Worker) ----------
+const syncCfg = lerConfig(LS);
+// 0 = este aparelho nunca guardou equipamento (só recebe o online); 1 = já tinha antes da cópia online existir
+if (syncCfg.perfilAtualizado == null) { syncCfg.perfilAtualizado = LS.getItem('oficina_perfil') ? 1 : 0; gravarConfig(LS, syncCfg); }
+// link do telemóvel: .../garagem/#k=<chave>. Guarda a chave e tira-a do endereço.
+const doLink = chaveDoLink(location.hash);
+if (doLink) {
+  syncCfg.codigo = doLink.chave;
+  gravarConfig(LS, syncCfg);
+  window.history.replaceState(null, '', location.pathname + location.search + (doLink.resto ? '#' + doLink.resto : ''));
+  if (WORKER_URL) setTimeout(() => toast('Cópia online ligada.'), 400);
+}
+aoGuardarPerfil = () => { syncCfg.perfilAtualizado = Date.now(); gravarConfig(LS, syncCfg); agendarSync(); };
+let syncT = null, syncA = false, syncEstado = null;
+const syncLigado = () => !!(WORKER_URL && syncCfg.codigo);
+function agendarSync(ms = 1500) {
+  if (!syncLigado()) return;
+  clearTimeout(syncT);
+  syncT = setTimeout(fazerSync, ms);
+}
+async function fazerSync() {
+  if (!syncLigado()) return;
+  if (syncA) { agendarSync(); return; }
+  syncA = true;
+  mostrarSync();
+  try {
+    const perfilAntes = syncCfg.perfilAtualizado;
+    const r = await sincronizar(WORKER_URL, syncCfg.codigo, { hist, perfil: { ...perfil }, perfilAtualizado: perfilAntes, conhecidos: syncCfg.conhecidos });
+    const novo = H.juntar(r.hist, hist); // o pai pode ter mudado algo durante o pedido
+    if (JSON.stringify(novo) !== JSON.stringify(hist)) { hist = novo; H.guardar(LS, hist); renderHist(); }
+    if (!H.iguais(novo, r.hist)) agendarSync();
+    syncCfg.conhecidos = r.conhecidos;
+    if (r.perfil && syncCfg.perfilAtualizado === perfilAntes) {
+      aplicarPerfil(r.perfil);
+      try { localStorage.setItem('oficina_perfil', JSON.stringify(perfil)); } catch { /* sem armazenamento */ }
+      syncCfg.perfilAtualizado = r.perfilAtualizado;
+    } else if (syncCfg.perfilAtualizado !== perfilAntes) agendarSync();
+    syncCfg.ultima = Date.now();
+    gravarConfig(LS, syncCfg);
+    syncEstado = { ok: true };
+  } catch (e) { syncEstado = { ok: false, msg: e.message || String(e) }; }
+  syncA = false;
+  mostrarSync();
+}
+function mostrarSync() {
+  $('#sync-bloco').hidden = !WORKER_URL;
+  const el = $('#hist-sync');
+  const est = $('#sync-estado');
+  let h = '', cls = '';
+  if (!syncLigado()) { el.hidden = true; est.className = 'muted'; est.textContent = 'Desligada. O histórico fica só neste aparelho.'; return; }
+  if (syncA) h = 'A guardar a cópia online…';
+  else if (syncEstado?.ok) { h = `✓ Cópia online em dia${syncCfg.ultima ? ' (' + quando(syncCfg.ultima) + ')' : ''}.`; cls = 'ok'; }
+  else if (syncEstado) { h = `✗ Cópia online: ${syncEstado.msg} O histórico continua guardado neste aparelho.`; cls = 'bad'; }
+  else h = 'Cópia online ligada.';
+  el.hidden = false;
+  el.className = 'hist-sync ' + cls;
+  el.textContent = h;
+  est.className = cls;
+  est.textContent = h;
+}
+$('#sync-ligar').addEventListener('click', () => {
+  const c = $('#sync-codigo').value.trim();
+  if (!c) { toast('Escreve o código de sincronização.', true); return; }
+  syncCfg.codigo = c;
+  gravarConfig(LS, syncCfg);
+  $('#sync-codigo').value = '';
+  syncEstado = null;
+  fazerSync();
+});
+$('#sync-desligar').addEventListener('click', () => {
+  if (!syncCfg.codigo || !confirm('Desligar a cópia online neste aparelho? O que já lá está não é apagado.')) return;
+  delete syncCfg.codigo;
+  gravarConfig(LS, syncCfg);
+  syncEstado = null;
+  mostrarSync();
+});
+mostrarSync();
+agendarSync(500);
 
 // ================= Arranque =================
 drawBed();

@@ -1,0 +1,15 @@
+name = "api-github-garagem-dados"
+main = "index.js"
+compatibility_date = "2025-09-01"
+
+# Sem [vars]: tudo o que é configuração está em Secrets (GITHUB_TOKEN, GITHUB_REPO, PAI_KEY, ADMIN_KEY),
+# porque um deploy com o wrangler apaga as variáveis que não estejam neste ficheiro.
+# Opcionais, também como Secret: GITHUB_RAMO (por omissão main), ORIGENS (por omissão https://r-lst.github.io).
+
+# Limite: 30 pedidos por minuto por endereço IP
+[[ratelimits]]
+name = "LIMITE"
+namespace_id = "1001"
+  [ratelimits.simple]
+  limit = 30
+  period = 60

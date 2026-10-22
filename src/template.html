@@ -19,6 +19,7 @@
     <a href="#projeto" data-tab="projeto" data-i="projeto"><span>Ver projeto</span></a>
     <a href="#peca" data-tab="peca" data-i="peca"><span>Peça 3D</span></a>
     <a href="#cortes" data-tab="cortes" data-i="cortes"><span>Cortes</span></a>
+    <a href="#historico" data-tab="historico" data-i="historico"><span>Histórico</span></a>
     <a href="#perfil" data-tab="perfil" data-i="equip"><span>Equipamento</span></a>
   </nav>
 </header>
@@ -26,6 +27,7 @@
 
 <!-- ===== INÍCIO ===== -->
 <section id="tab-inicio" class="tab">
+  <div class="continuar" id="continuar"></div>
   <div class="hero">
     <div class="hero-txt">
       <p class="sobre">Marcenaria · Impressão 3D</p>
@@ -41,6 +43,7 @@
     <a class="cartao" href="#projeto"><span class="ci" data-i="projeto"></span><h3>Ver projeto</h3><p>Cola a resposta do Claude e vê o móvel em 3D, peça a peça, com medidas.</p><span class="ir" data-i="seta">Abrir</span></a>
     <a class="cartao" href="#peca"><span class="ci" data-i="peca"></span><h3>Peça 3D</h3><p>Abre um STL, muda medidas, faz furos e cortes, e guarda para imprimir.</p><span class="ir" data-i="seta">Abrir</span></a>
     <a class="cartao" href="#cortes"><span class="ci" data-i="cortes"></span><h3>Cortes de madeira</h3><p>Quantas tábuas comprar e como cortar cada uma, com o mínimo de desperdício.</p><span class="ir" data-i="seta">Abrir</span></a>
+    <a class="cartao" href="#pedir" id="cartao-reparar"><span class="ci" data-i="reparar"></span><h3>Reparar alguma coisa</h3><p>Descreve a avaria e junta uma foto. O Claude ajuda a perceber a causa e a resolver.</p><span class="ir" data-i="seta">Abrir</span></a>
   </div>
 
   <div class="como">
@@ -70,9 +73,13 @@
 
   <div class="passo" data-passo="2" hidden>
     <div class="escolhido" id="escolhido"></div>
-    <label for="pedido" class="q">O que queres?</label>
+    <div id="areas" hidden>
+      <p class="q">O que se avariou? <span class="muted">(opcional)</span></p>
+      <div class="chips" id="areas-chips"></div>
+    </div>
+    <label for="pedido" class="q" id="pedido-l">O que queres?</label>
     <textarea id="pedido" rows="7"></textarea>
-    <div class="dicas"><b>Ajuda o Claude se disseres:</b> o que é e para que serve · medidas aproximadas · onde vai ficar · o material que tens. Se não souberes, não faz mal: ele pergunta.</div>
+    <div class="dicas" id="pedido-dicas"></div>
     <div id="aviso-peca" class="aviso"></div>
     <div class="row entre">
       <button class="sec" id="voltar1" data-i="voltar">Voltar</button>
@@ -84,7 +91,7 @@
     <div class="acoes">
       <div class="acao"><b>1</b><div><h4>Copiar o pedido</h4><button id="copiar" class="grande" data-i="copiar">Copiar pedido</button><span id="copiado" class="ok" hidden></span></div></div>
       <div class="acao"><b>2</b><div><h4>Abrir o Claude</h4><a id="abrir-claude" class="btn sec grande" href="https://claude.ai/new" target="_blank" rel="noopener" data-i="abrir">Abrir o Claude</a></div></div>
-      <div class="acao"><b>3</b><div><h4>Colar e enviar</h4><p>Clica na caixa de texto do Claude, carrega <kbd>Ctrl</kbd> + <kbd>V</kbd> e envia. Responde às perguntas uma a uma.</p></div></div>
+      <div class="acao"><b>3</b><div><h4 id="colar-t">Colar e enviar</h4><p>Clica na caixa de texto do Claude, carrega <kbd>Ctrl</kbd> + <kbd>V</kbd><span id="colar-foto" hidden>, junta uma ou duas fotos da avaria</span> e envia. Responde às perguntas uma a uma.</p><p class="muted" id="foto-como" hidden>Para juntar a foto: no computador, carrega no clipe da caixa do Claude ou arrasta a foto para lá; no telemóvel, carrega no + e escolhe a foto.</p></div></div>
     </div>
     <div class="depois">
       <h3>Quando o Claude terminar</h3>
@@ -130,7 +137,7 @@
         <div class="bloco destaque">
           <h3>Lista de cortes</h3>
           <p class="muted">Já calculada a partir do desenho, separada por tipo de tábua.</p>
-          <button id="proj-cortes" class="grande" data-i="cortes">Calcular tábuas a comprar</button>
+          <div class="row"><button id="proj-cortes" class="grande" data-i="cortes">Calcular tábuas a comprar</button><button id="proj-folha" class="sec grande" data-i="imprimir">Imprimir folha de cortes</button></div>
         </div>
       </div>
     </div>
@@ -181,6 +188,7 @@
           <div><label for="my">Y (mm)</label><input type="number" id="my" step="any" min="0"></div>
           <div><label for="mz">Z (mm)</label><input type="number" id="mz" step="any" min="0"></div>
         </div>
+        <div id="aviso-medidas" class="aviso"></div>
         <label class="tog"><input type="checkbox" id="prop" checked> Manter as proporções</label>
         <div class="row"><button id="aplicar-medidas">Aplicar medidas</button></div>
         <label for="pct">Ou escalar em percentagem</label>
@@ -242,12 +250,14 @@
         <h3><span class="num">4</span> Guardar</h3>
         <label for="nome-saida">Nome do ficheiro</label>
         <input type="text" id="nome-saida" value="peca.stl">
+        <p id="aviso-guardar" class="bad" hidden></p>
         <div class="row"><button id="guardar" class="grande" data-i="guardar">Guardar STL</button></div>
         <p class="muted">Vai para a pasta Transferências. Abre-o no Cura ou no Creality Print.</p>
       </div>
     </div>
 
     <div class="viewcol">
+      <div class="faixa-k1" id="faixa-k1" hidden></div>
       <div class="viewer" id="viewer">
         <div class="vazio" id="vazio"><div><span data-i="peca"></span><p>Abre um ficheiro STL, cria uma peça ou importa do Claude.</p></div></div>
         <div class="dica-rato">Arrastar: rodar · Botão direito: mover · Roda: aproximar</div>
@@ -255,6 +265,7 @@
       <div class="ferramentas">
         <button class="sec" id="desfazer" disabled data-i="desfazer">Desfazer</button>
         <button class="sec" id="vista" data-i="enquadrar">Enquadrar</button>
+        <button class="sec" id="melhor-pos" data-i="melhorpos">Melhor posição para imprimir</button>
         <div class="cores" id="cores-pla" title="Cor do filamento"></div>
       </div>
       <div id="info" class="bloco"><span class="muted">Sem peça aberta.</span></div>
@@ -285,11 +296,36 @@
   </div>
 </section>
 
+<!-- ===== HISTÓRICO ===== -->
+<section id="tab-historico" class="tab">
+  <div class="hist-wrap">
+    <div class="cabeca"><h2>Histórico</h2><p class="muted">Os teus pedidos e projetos de madeira, do mais recente para o mais antigo. Ficam guardados neste aparelho.</p></div>
+    <div id="hist-sync" class="hist-sync" hidden></div>
+    <div id="hist-lista" class="hist-lista"></div>
+    <div class="bloco hist-copia">
+      <h3>Cópia de segurança</h3>
+      <p class="muted">Guarda num ficheiro o histórico e o equipamento. Serve para não perder nada se mudares de computador ou limpares o browser.</p>
+      <div class="row"><button class="sec" id="hist-exportar" data-i="guardar">Guardar uma cópia</button><label class="btn sec ficheiro-btn" data-i="abrirficheiro"><span>Recuperar uma cópia</span><input type="file" id="hist-importar" accept=".json,application/json"></label></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== MODO OFICINA ===== -->
+<section id="tab-oficina" class="tab">
+  <div class="oficina">
+    <a class="voltar-link" href="#historico" data-i="voltar">Projetos</a>
+    <h2 id="of-nome"></h2>
+    <p class="of-sub" id="of-sub"></p>
+    <div class="seg of-seg" id="of-seg"><button data-v="cortar">Cortar</button><button data-v="comprar">Comprar</button><button data-v="montar">Montar</button></div>
+    <div id="of-corpo"></div>
+  </div>
+</section>
+
 <!-- ===== EQUIPAMENTO ===== -->
 <section id="tab-perfil" class="tab">
   <div class="bloco estreito">
     <h2>O meu equipamento</h2>
-    <p class="muted">Preenche uma vez. Fica guardado neste computador e vai em todos os pedidos ao Claude, para ele não perguntar outra vez.</p>
+    <p class="muted">Preenche uma vez. Fica guardado neste aparelho e vai em todos os pedidos ao Claude, para ele não perguntar outra vez.</p>
     <h3>Impressora 3D</h3>
     <div class="grid2">
       <div><label for="p-impressora">Modelo</label><input type="text" id="p-impressora" data-k="impressora"></div>
@@ -307,10 +343,35 @@
     <label for="p-notas">Outras notas (opcional)</label>
     <textarea id="p-notas" rows="3" data-k="notas" placeholder="Ex.: a oficina é pequena, não tenho aspirador..."></textarea>
     <p id="p-guardado" class="ok" hidden>Guardado ✓</p>
+    <div id="sync-bloco" hidden>
+      <h3>Cópia online</h3>
+      <p class="muted">Guarda o histórico e o equipamento também na internet, num sítio privado, e passa-os entre o computador e o telemóvel. Liga-se sozinha quando abres o link que o Leston te mandou.</p>
+      <label for="sync-codigo">Ou escreve a chave aqui</label>
+      <input type="text" id="sync-codigo" autocomplete="off" spellcheck="false">
+      <div class="row"><button id="sync-ligar">Ligar</button><button class="sec" id="sync-desligar">Desligar</button></div>
+      <p id="sync-estado"></p>
+    </div>
   </div>
 </section>
 
 </main>
+<div id="folha" class="folha" aria-hidden="true"></div>
+<nav class="barra" id="barra" aria-label="Menu">
+  <a href="#inicio" data-tab="inicio" data-i="inicio"><span>Início</span></a>
+  <a href="#historico" data-tab="historico" data-i="historico"><span>Projetos</span></a>
+  <a href="#pedir" data-tab="pedir" data-i="pedir"><span>Pedir</span></a>
+  <a href="#cortes" data-tab="cortes" data-i="cortes"><span>Cortes</span></a>
+  <button type="button" id="mais-abrir" data-i="mais"><span>Mais</span></button>
+</nav>
+<div class="mais" id="mais" hidden>
+  <div class="mais-folha">
+    <h3>Mais</h3>
+    <a class="btn sec grande" href="#projeto" data-i="projeto">Ver projeto</a>
+    <a class="btn sec grande" href="#peca" data-i="peca"><span>Peça 3D <small>é mais fácil no computador</small></span></a>
+    <a class="btn sec grande" href="#perfil" data-i="equip">Equipamento</a>
+    <button type="button" class="sec" id="mais-fechar">Fechar</button>
+  </div>
+</div>
 <div id="toast" class="toast"></div>
 <script>/*JS*/</script>
 </body>

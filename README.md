@@ -1,6 +1,6 @@
 # Garagem
 
-Ferramentas para marcenaria e impressão 3D, a correr no browser (nada é enviado para servidores).
+Ferramentas para marcenaria e impressão 3D, a correr no browser. Funciona sem internet; a única coisa que sai do browser é a cópia online do histórico e do equipamento, se for ligada (ver abaixo).
 
 **Usar:** https://r-lst.github.io/garagem/
 
@@ -10,15 +10,20 @@ Ferramentas para marcenaria e impressão 3D, a correr no browser (nada é enviad
 | Ver projeto | Cola o modelo que o Claude entrega e vê o móvel em 3D, com a lista de cortes |
 | Peça 3D | Abre/cria STL, altera medidas, furos, cortes, e guarda para o Cura/Creality Print |
 | Cortes | Quantas tábuas comprar e como cortar |
+| Histórico | Pedidos e projetos de madeira feitos; ver em 3D outra vez, copiar o pedido, cópia de segurança |
 | Equipamento | Impressora e ferramentas; ficam guardadas no browser |
 
-Os dados do utilizador (equipamento, ficheiros STL, projetos) ficam só no browser.
+## Dados
+
+- Equipamento, histórico e ficheiros STL ficam no browser. Os STL nunca saem do computador.
+- **Cópia de segurança:** no Histórico, "Guardar uma cópia" descarrega um ficheiro com o histórico e o equipamento; "Recuperar uma cópia" repõe-no.
+- **Cópia online (opcional):** com uma chave ligada no aparelho (pelo link `#k=` ou no Equipamento), o histórico e o equipamento são guardados também num repositório privado do GitHub, através de um Cloudflare Worker (`worker/`, instruções em `worker/LEIA-ME.md`), e passam entre o computador e o telemóvel. A página nunca tem o token do GitHub. Os STL não vão.
 
 ## Desenvolvimento
 
 ```
 npm ci
-npm test        # testes da lógica (geometria, cortes, projetos)
+npm test        # testes da lógica (geometria, cortes, projetos, histórico, Worker)
 npm run build   # gera dist/index.html (ficheiro único)
 ```
 
@@ -26,7 +31,9 @@ npm run build   # gera dist/index.html (ficheiro único)
 - `src/project.js` leitura e desenho dos projetos de madeira, lista de cortes
 - `src/cuts.js` cálculo de cortes
 - `src/prompts.js` texto dos pedidos ao Claude
+- `src/historico.js` e `src/sync.js` histórico e cópia online
 - `src/main.js` interface
+- `worker/` Cloudflare Worker da cópia online
 
 ## Versões e publicação
 
