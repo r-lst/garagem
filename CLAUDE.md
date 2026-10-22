@@ -75,6 +75,7 @@ A página só fala com o **Worker da Garagem** (`WORKER_URL`), e só para os uso
 - `G.rodarParaCaber` tenta, por esta ordem: rodar 90° na mesa → diagonal da mesa (estas duas mantêm a face de baixo) → virar para outra face → virada e na diagonal. Não trocar a ordem: uma barra fina ficava de pé.
 - Roda **sozinha só quando a peça entra** (abrir STL, criar, importar do Claude) e avisa (faixa acima do desenho com Desfazer, e mensagem em baixo, porque no telemóvel o pai está no formulário). Depois de alterações, só avisa, com o botão **Rodar para caber**. Sem posição possível: "A peça excede o tamanho". Nunca corta sozinha.
 - O Guardar avisa mas guarda sempre (decisão do Leston).
+- **Melhor posição para imprimir** (`G.melhorPosicao`): das 6 faces que cabem, escolhe menos suportes (faces viradas para baixo mais de 45°, fora da mesa), depois mais área na mesa, depois menos altura; empate fica como está. Não decide a resistência: isso é o Claude, a quem o pedido de Peça 3D pergunta onde a peça faz força e pede a posição para imprimir. A faixa lembra o Desfazer por isso.
 
 ## Geometria: cuidados
 - Booleanas com `three-bvh-csg`. O resultado passa por `clean()` e `repairTJunctions()`; sem isto saem junções em T e a malha parece aberta.

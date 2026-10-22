@@ -285,7 +285,7 @@ let mesh = null;
 let previewMesh = null;
 let previewMode = null;
 let fittedOnce = false;
-let rodadaAuto = null; // texto de como a peça foi rodada para caber (mostra a faixa com Desfazer)
+let faixaInfo = null; // {titulo, linhas}: a peça foi rodada pela app (faixa amarela com Desfazer)
 const history = [];
 const matPrev = new THREE.MeshBasicMaterial({ color: 0xe11d48, transparent: true, opacity: 0.42, depthWrite: false });
 
@@ -320,11 +320,11 @@ function solucao(g) {
 }
 function renderFaixa(exc) {
   const el = $('#faixa-k1');
-  if (!geo || (!rodadaAuto && !exc.length)) { el.hidden = true; return; }
+  if (!geo || (!faixaInfo && !exc.length)) { el.hidden = true; return; }
   el.hidden = false;
-  if (rodadaAuto) {
+  if (faixaInfo) {
     el.className = 'faixa-k1 info';
-    el.innerHTML = `<b>${icon('certo')}Rodei a peça para caber na ${esc(nomeImp())}.</b><span>${esc(rodadaAuto)}</span><div class="row"><button class="sec" data-faixa="desfazer">${icon('desfazer')}Desfazer</button></div>`;
+    el.innerHTML = `<b>${icon('certo')}${esc(faixaInfo.titulo)}</b>${faixaInfo.linhas.map((l) => `<span>${esc(l)}</span>`).join('')}<div class="row"><button class="sec" data-faixa="desfazer">${icon('desfazer')}Desfazer</button></div>`;
     return;
   }
   const sol = solucao(geo);
@@ -346,11 +346,30 @@ function rodarParaCaber(msg) {
   const s = solucao(geo);
   if (!s || !s.como) return false;
   setGeo(s.geo, msg, { fit: true });
-  rodadaAuto = s.como;
+  faixaInfo = { titulo: `Rodei a peça para caber na ${nomeImp()}.`, linhas: [s.como] };
   refreshAxisUI(true);
   updateInfo();
   return true;
 }
+const cm2 = (a) => (a < 100 ? 'quase nenhuns' : `~${fmt(a / 100, 0)} cm²`);
+$('#melhor-pos').addEventListener('click', () => {
+  if (!geo) { toast('Abre ou cria uma peça primeiro.', true); return; }
+  later(() => {
+    const r = G.melhorPosicao(geo, bed());
+    if (!r) { toast(`A peça não cabe na ${nomeImp()} em nenhuma posição.`, true); return; }
+    if (!r.mudou) { toast('Já está na melhor posição para imprimir.'); return; }
+    const { antes: a, depois: d } = r;
+    setGeo(r.geo, 'Peça na melhor posição para imprimir.', { fit: true });
+    faixaInfo = { titulo: 'Pus a peça na melhor posição para imprimir.', linhas: [
+      `Suportes: ${cm2(d.suporte)} (antes ${cm2(a.suporte)})`,
+      `Face na mesa: ${fmt(d.base / 100, 0)} cm² (antes ${fmt(a.base / 100, 0)} cm²)`,
+      ...(Math.abs(d.altura - a.altura) > 0.5 ? [`Altura: ${mm(d.altura)} (antes ${mm(a.altura)})`] : []),
+      'Se o Claude recomendou outra posição por causa da força, usa Desfazer.',
+    ] };
+    refreshAxisUI(true);
+    updateInfo();
+  });
+});
 /** Chamado quando a peça entra (abrir, criar, importar): roda sozinha se não couber e houver posição. */
 function rodarAoEntrar() {
   if (!geo || !G.excessos(G.bbox(geo).size, bed()).length) return;
@@ -403,7 +422,7 @@ function showMesh() {
   PV.scene.add(mesh);
 }
 function setGeo(g, msg, { fit = false, noHistory = false } = {}) {
-  rodadaAuto = null;
+  faixaInfo = null;
   if (geo && !noHistory) { history.push(geo); if (history.length > 30) history.shift(); }
   geo = g;
   showMesh();
@@ -419,7 +438,7 @@ function setGeo(g, msg, { fit = false, noHistory = false } = {}) {
 }
 $('#desfazer').addEventListener('click', () => {
   if (!history.length) return;
-  rodadaAuto = null;
+  faixaInfo = null;
   geo = history.pop();
   showMesh();
   previewMode = null;

@@ -18,7 +18,8 @@ COMO QUERO QUE TRABALHES
 4. Se o que peço não for boa ideia (frágil, não cabe, não imprime bem, material errado), diz-me com franqueza e propõe alternativa.`;
 
 const FORMATO_JSON = `FORMATO DA ENTREGA FINAL
-Antes do bloco, escreve 3 linhas: medidas finais, orientação recomendada para imprimir, e se precisa de suportes.
+Nas perguntas, se a peça vai aguentar peso ou força, pergunta-me onde e em que direção.
+Antes do bloco, escreve 3 linhas: medidas finais; posição para imprimir (que face fica assente na mesa e porquê; as camadas da impressão separam-se facilmente se a força as puxar uma da outra, por isso escolhe a posição em que a força fica ao longo das camadas); e se precisa de suportes.
 Depois entrega UM único bloco de código com JSON (e mais nada dentro do bloco). Eu vou colá-lo numa aplicação que constrói o ficheiro STL. Regras do JSON:
 - Medidas em milímetros. O eixo Z é para cima. Cada forma é posicionada pelo seu CENTRO.
 - "add" junta uma forma, "sub" retira (furos, rebaixos). As operações são aplicadas pela ordem. A primeira tem de ser "add".

@@ -77,6 +77,7 @@ ok(exact.count === 1, 'duas de 1200 com serra de 3 mm cabem em 2403');
 const pr = buildPrompt({ modo: 'alterar', texto: 'furo de 6 mm', perfil: { impressora: 'Creality K1', vx: 220, vy: 220, vz: 250, material: 'PLA' }, peca: { sx: 40, sy: 30, sz: 20, minx: -20, maxx: 20, miny: -15, maxy: 15, minz: 0, maxz: 20 } });
 ok(/40 × 30 × 20/.test(pr) && /carregada/.test(pr) && /Creality K1/.test(pr), 'prompt alterar inclui medidas e perfil');
 ok(/lista de cortes/i.test(buildPrompt({ modo: 'madeira', texto: 'x' })), 'prompt madeira');
+ok(/posição para imprimir/.test(buildPrompt({ modo: 'peca3d', texto: 'x' })) && /onde e em que direção/.test(buildPrompt({ modo: 'peca3d', texto: 'x' })), 'prompt peça 3D: pergunta a força e diz a posição');
 
 // Caber na K1 (220 × 220 × 250)
 const K1 = { x: 220, y: 220, z: 250 };
@@ -100,6 +101,19 @@ rc = G.rodarParaCaber(bloco(300, 20, 10), K1);
 ok(rc && /diagonal/.test(rc.como) && !G.excessos(G.bbox(rc.geo).size, K1).length, `300 de comprido: na diagonal (${tam(rc?.geo)}) — ${rc?.como}`);
 ok(G.rodarParaCaber(bloco(240, 240, 240), K1) === null, '240 × 240 × 240: não cabe de forma nenhuma');
 ok(G.rodarParaCaber(bloco(400, 20, 10), K1) === null, '400 de comprido: nem na diagonal');
+
+// Melhor posição para imprimir
+const mesa = G.placeOnBed(buildSpec({ operacoes: [{ op: 'add', forma: 'caixa', tamanho: [10, 10, 40], centro: [0, 0, 20] }, { op: 'add', forma: 'caixa', tamanho: [60, 60, 5], centro: [0, 0, 42.5] }] }));
+let mp = G.melhorPosicao(mesa, K1);
+ok(mp.mudou && mp.antes.suporte > 3000 && mp.depois.suporte < 50 && near(mp.depois.base, 3600, 5), `"mesa" de pé: vira ao contrário (suporte ${Math.round(mp.antes.suporte)} → ${Math.round(mp.depois.suporte)} mm², mesa ${Math.round(mp.antes.base)} → ${Math.round(mp.depois.base)} mm²)`);
+ok(near(G.bbox(mp.geo).min.z, 0) && !G.excessos(G.bbox(mp.geo).size, K1).length, 'fica assente e dentro da K1');
+mp = G.melhorPosicao(bloco(10, 50, 100), K1);
+ok(mp.mudou && near(mp.depois.altura, 10) && near(mp.depois.base, 5000, 5), `tábua de pé: deita (altura ${Math.round(mp.antes.altura)} → ${Math.round(mp.depois.altura)} mm)`);
+mp = G.melhorPosicao(bloco(100, 50, 10), K1);
+ok(!mp.mudou && near(mp.depois.base, 5000, 5), 'tábua deitada: já está na melhor posição');
+mp = G.melhorPosicao(bloco(300, 30, 10), K1);
+ok(mp && !G.excessos(G.bbox(mp.geo).size, K1).length, `300 de comprido: escolhe uma posição que cabe (${tam(mp?.geo)})`);
+ok(G.melhorPosicao(bloco(400, 300, 20), K1) === null, 'grande demais: sem posição');
 
 console.log(fails ? `\n${fails} FALHAS` : '\nTudo OK');
 process.exit(fails ? 1 : 0);

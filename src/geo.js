@@ -134,6 +134,77 @@ export function rodarParaCaber(g, lim, tol = 0.01) {
     || diagonal(rotate(g, 'y', 90), 'Virei-a e pus-a na diagonal da mesa, rodada {deg}°.');
 }
 
+/** Na mesma face: tal como está, rodada 90° na mesa ou na diagonal. Devolve a peça assente, ou null. */
+function caberMesmaFace(g, lim, tol = 0.01) {
+  const cabe = (x) => !excessos(bbox(x).size, lim, tol).length;
+  const b = placeOnBed(g);
+  if (cabe(b)) return b;
+  const r = placeOnBed(rotate(b, 'z', 90));
+  if (cabe(r)) return r;
+  if (bbox(b).size.z > lim.z + tol) return null;
+  const pos = b.getAttribute('position').array;
+  let melhor = null;
+  for (let deg = 1; deg < 90; deg++) {
+    const p = pegada(pos, deg);
+    const folga = Math.min(lim.x - p.x, lim.y - p.y);
+    if (folga >= -tol && (!melhor || folga > melhor.folga)) melhor = { deg, folga };
+  }
+  return melhor ? placeOnBed(rotate(b, 'z', melhor.deg)) : null;
+}
+
+/**
+ * Para imprimir: área a precisar de suporte (faces viradas para baixo com mais de 45°, fora da mesa),
+ * área assente na mesa e altura. Áreas em mm². A peça tem de estar assente (Z mínimo = 0).
+ */
+export function medidasImpressao(g) {
+  const p = g.getAttribute('position').array;
+  const idx = g.index ? g.index.array : null;
+  const n = idx ? idx.length : p.length / 3;
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), nrm = new THREE.Vector3();
+  const v = (i, out) => out.set(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]);
+  let suporte = 0, base = 0;
+  for (let t = 0; t < n; t += 3) {
+    v(idx ? idx[t] : t, a); v(idx ? idx[t + 1] : t + 1, b); v(idx ? idx[t + 2] : t + 2, c);
+    nrm.subVectors(b, a).cross(c.clone().sub(a));
+    const area = nrm.length() / 2;
+    if (area < 1e-9) continue;
+    const nz = nrm.z / (2 * area);
+    if (nz > -0.7072) continue; // não está virada para baixo mais de 45°
+    if (Math.max(a.z, b.z, c.z) < 0.05) base += area;
+    else suporte += area;
+  }
+  return { suporte, base, altura: bbox(g).size.z };
+}
+
+/**
+ * Melhor face para assentar na mesa, entre as 6, dentro do volume lim: menos suportes, depois mais área na mesa,
+ * depois menos altura. Devolve {geo, antes, depois, mudou}, ou null se não couber em nenhuma.
+ */
+export function melhorPosicao(g, lim) {
+  const faces = [[], [['x', 90]], [['x', -90]], [['y', 90]], [['y', -90]], [['x', 180]]];
+  const cands = [];
+  for (const rs of faces) {
+    let r = g;
+    for (const [e, d] of rs) r = rotate(r, e, d);
+    const ok = caberMesmaFace(r, lim);
+    if (ok) cands.push({ geo: ok, m: medidasImpressao(ok), atual: !rs.length });
+  }
+  if (!cands.length) return null;
+  const perto = (x, y) => Math.abs(x - y) <= Math.max(50, 0.1 * Math.max(x, y)); // 0,5 cm² ou 10%
+  cands.sort((A, B) => {
+    const a = A.m, b = B.m;
+    if (!perto(a.suporte, b.suporte)) return a.suporte - b.suporte;
+    if (!perto(a.base, b.base)) return b.base - a.base;
+    if (Math.abs(a.altura - b.altura) > 0.5) return a.altura - b.altura;
+    return (B.atual ? 1 : 0) - (A.atual ? 1 : 0); // empate: fica como está
+  });
+  const melhor = cands[0];
+  const atual = cands.find((x) => x.atual);
+  const antes = medidasImpressao(placeOnBed(g));
+  const mudou = !melhor.atual;
+  return { geo: mudou ? melhor.geo : (atual.geo), antes, depois: melhor.m, mudou };
+}
+
 /** Contagem de triângulos, volume (mm³) e se a malha está fechada (sem buracos que se vejam). */
 export function stats(g) {
   const p = g.getAttribute('position');
