@@ -27,6 +27,7 @@ App web estática para marcenaria e impressão 3D, com um Cloudflare Worker para
 | `shapes.js` | Peça 3D a partir de JSON do Claude (formas `add`/`sub`) e geradores simples (caixa, tampa, tubo, suporte em L, placa) |
 | `project.js` | Projeto de madeira: lê o JSON, cria a geometria, deteta peças soltas, calcula a lista de cortes |
 | `cuts.js` | Cálculo de cortes de tábuas (1D), por grupos |
+| `folha.js` | Folha de cortes para imprimir (sem DOM, devolve HTML): comprar, cortar, como cortar cada tábua |
 | `prompts.js` | Texto dos pedidos que o pai cola no Claude |
 | `historico.js` | Histórico (sem DOM): registar pedido, ligar projeto, apagar, juntar duas cópias, ficheiro de cópia |
 | `sync.js` | Cópia online: lê do Worker o que mudou, junta com o local, grava o que é mais recente cá; chave do link `#k=` |
@@ -64,6 +65,11 @@ A página só fala com o **Worker da Garagem** (`WORKER_URL`), e só para os uso
 - Os leitores toleram chaves em maiúsculas/acentos (`normKeys`) e devolvem erros em português que dizem **que peça** e **que campo** falhou, porque é isso que o pai pode dizer ao Claude para corrigir.
 - Se mudares um campo: atualizar o texto em `prompts.js`, o leitor, o exemplo `EXEMPLO_PROJETO` e os testes.
 
+## Folha de cortes
+- Abre com **Imprimir folha de cortes** (Ver projeto, ou Cortes depois de calcular). Usa o comprimento de tábua, a serra e o aparo do separador Cortes.
+- Imprime só `#folha` (`body.a-imprimir`, tirado no `afterprint`). Estilo só dentro de `@media print`, em pt; preto e branco; a sobra tracejada usa `print-color-adjust: exact`.
+- Para ver o resultado sem impressora: Edge sem janela com `--print-to-pdf` sobre uma cópia do `dist/index.html` que carrega no botão.
+
 ## Geometria: cuidados
 - Booleanas com `three-bvh-csg`. O resultado passa por `clean()` e `repairTJunctions()`; sem isto saem junções em T e a malha parece aberta.
 - `stats().closed` usa o balanço de área (tolerante a ruído de ~1e-4 mm das booleanas). `strictClosed` é o rigoroso. Não simplificar sem correr `npm test`: já falhou por isto.
@@ -72,10 +78,10 @@ A página só fala com o **Worker da Garagem** (`WORKER_URL`), e só para os uso
 ## Como testar
 ```
 npm ci
-npm test         # lógica: geometria, cortes, projetos, pedidos, histórico, Worker (GitHub simulado)
+npm test         # lógica: geometria, cortes, projetos, pedidos, histórico, Worker (GitHub simulado), folha de cortes
 npm run build    # gera dist/index.html
 ```
-Abrir `dist/index.html` no browser (duplo clique) e experimentar: Início; Pedir ao Claude (3 passos); Ver projeto → "Ver um exemplo"; Peça 3D → criar suporte em L, furar, cortar, guardar; Cortes; Histórico (fazer um pedido de madeira, desenhar, "Ver em 3D", apagar, guardar/recuperar cópia).
+Abrir `dist/index.html` no browser (duplo clique) e experimentar: Início; Pedir ao Claude (3 passos); Ver projeto → "Ver um exemplo"; Peça 3D → criar suporte em L, furar, cortar, guardar; Cortes; Ver projeto → "Imprimir folha de cortes" (pré-visualização de impressão: A4, preto e branco, 2 páginas no exemplo); Histórico (fazer um pedido de madeira, desenhar, "Ver em 3D", apagar, guardar/recuperar cópia).
 Os testes automáticos não cobrem a interface. Depois de mexer em UI, abrir a página e verificar à mão.
 
 ## Ramos e publicação

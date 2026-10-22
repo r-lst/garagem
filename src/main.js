@@ -8,6 +8,7 @@ import * as PJ from './project.js';
 import { GERADORES, buildSpec, extractJSON } from './shapes.js';
 import { parseLines, planGroups } from './cuts.js';
 import { buildPrompt, MODOS } from './prompts.js';
+import { folhaCortes } from './folha.js';
 import { icon, fillIcons } from './icons.js';
 import * as H from './historico.js';
 import { sincronizar, lerConfig, gravarConfig, chaveDoLink } from './sync.js';
@@ -837,9 +838,22 @@ $('#proj-cortes').addEventListener('click', () => {
   if (!projCortes) return;
   $('#t-unid').value = '1';
   $('#t-lista').value = PJ.cutListText(projCortes);
-  cortesExtra = { placas: projCortes.placas, ferragens: projCortes.ferragens, nome: projData.nome };
+  cortesExtra = extraDoProjeto();
   goto('cortes');
   setTimeout(() => $('#calcular').click(), 60);
+});
+function extraDoProjeto() {
+  const s = projBox.getSize(new THREE.Vector3());
+  return { placas: projCortes.placas, ferragens: projCortes.ferragens, nome: projData.nome, madeira: projData.madeira || '', medidas: [s.x, s.y, s.z] };
+}
+$('#proj-folha').addEventListener('click', () => {
+  if (!projCortes) { toast('Desenha um projeto primeiro.', true); return; }
+  try {
+    // comprimento da tábua, serra e aparo: os do separador Cortes
+    const { groups } = parseLines(PJ.cutListText(projCortes), 1);
+    const plans = planGroups(groups, { board: val($('#t-comp')) * Number($('#t-unid').value), kerf: val($('#t-serra')) || 0, trim: val($('#t-aparo')) || 0 });
+    imprimirFolha(plans, 1, extraDoProjeto());
+  } catch (e) { toast(e.message || String(e), true); }
 });
 
 $('#proj-imagem').addEventListener('click', () => {
@@ -922,6 +936,12 @@ $('#calcular').addEventListener('click', () => {
     erro.className = 'erro on';
   }
 });
+function imprimirFolha(plans, f, extra) {
+  $('#folha').innerHTML = folhaCortes({ titulo: extra?.nome || '', medidas: extra?.medidas || null, madeira: extra?.madeira || '', plans, f, extra });
+  document.body.classList.add('a-imprimir');
+  window.print();
+}
+window.addEventListener('afterprint', () => document.body.classList.remove('a-imprimir'));
 function renderPlans(plans, f) {
   const u = f === 10 ? 'cm' : 'mm';
   const show = (mm) => fmt(mm / f, f === 10 ? 1 : 0);
@@ -951,11 +971,12 @@ function renderPlans(plans, f) {
   if (plans[0].kerf > 0) h += `<p class="muted">Contado o corte da serra (${fmt(plans[0].kerf, 1)} mm) entre peças.</p>`;
   if (cortesExtra?.placas?.length) h += `<h3>Também precisas (placas e peças largas)</h3><table class="lista"><tr><th>Peça</th><th>Medidas</th><th>Qtd</th></tr>${cortesExtra.placas.map((p) => `<tr><td>${esc(p.nome)}${p.recorte ? ' (recortar)' : ''}</td><td>${fmt(p.comprimento, 0)} × ${fmt(p.largura, 0)} × ${fmt(p.espessura, 0)} mm</td><td>${p.qty}</td></tr>`).join('')}</table>`;
   if (cortesExtra?.ferragens?.length) h += `<h3>Ferragens</h3><table class="lista">${cortesExtra.ferragens.map((p) => `<tr><td>${esc(p.nome)}</td><td>${p.qty}</td></tr>`).join('')}</table><p class="muted">Só as ferragens que o Claude desenhou. Confirma na lista de materiais dele.</p>`;
-  h += `<div class="row no-print"><button id="imprimir" class="sec">${icon('imprimir')}Imprimir</button></div>`;
+  h += `<div class="row no-print"><button id="imprimir" class="sec">${icon('imprimir')}Imprimir folha de cortes</button></div>`;
   const out = $('#t-saida');
   out.innerHTML = h;
   out.hidden = false;
-  $('#imprimir').addEventListener('click', () => window.print());
+  const extra = cortesExtra;
+  $('#imprimir').addEventListener('click', () => imprimirFolha(plans, f, extra));
   out.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 

@@ -265,6 +265,41 @@ body.busy::after { content: "A processar…"; position: fixed; inset: 0; backgro
   .passos3 { grid-template-columns: 1fr; }
   nav a span { display: none; }
 }
+/* ---------- folha de cortes (só na impressão) ---------- */
+.folha { display: none; }
+@media print {
+  @page { size: A4 portrait; margin: 14mm 14mm 16mm; }
+  body.a-imprimir { background: #fff; color: #000; font-size: 14pt; line-height: 1.35; }
+  body.a-imprimir > *:not(.folha) { display: none !important; }
+  body.a-imprimir .folha { display: block; }
+  .folha, .folha h1, .folha h2, .folha h3 { color: #000; }
+  .folha h1 { font-size: 20pt; margin: 0; }
+  .folha h2 { font-size: 17pt; margin: 16pt 0 6pt; padding-bottom: 3pt; border-bottom: 2pt solid #000; break-after: avoid; }
+  .folha h2 small { font-family: var(--sans); font-size: 11pt; font-weight: 400; }
+  .folha h3 { font-size: 14pt; margin: 10pt 0 4pt; break-after: avoid; }
+  .ft-cab { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4pt 16pt; border-bottom: 3pt solid #000; padding-bottom: 6pt; }
+  .ft-data { font-size: 12pt; }
+  .ft-sub { width: 100%; margin: 0; font-size: 14pt; font-weight: 700; }
+  .cx { display: inline-block; flex: none; width: 13pt; height: 13pt; border: 1.5pt solid #000; border-radius: 2pt; margin-right: 8pt; vertical-align: -2pt; }
+  .ft-lista { list-style: none; margin: 0; padding: 0; }
+  .ft-lista li { display: flex; align-items: baseline; gap: 8pt; padding: 5pt 0; border-bottom: 1pt dotted #000; break-inside: avoid; }
+  .ft-q { margin-left: auto; font-weight: 700; white-space: nowrap; }
+  .ft-aviso { font-weight: 700; border: 1.5pt solid #000; padding: 6pt 8pt; }
+  .ft-nota { font-size: 11pt; margin: 6pt 0 0; }
+  .ft-tab { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .ft-tab th { text-align: left; font-size: 10pt; text-transform: uppercase; letter-spacing: .04em; border-bottom: 1.5pt solid #000; padding: 3pt 6pt; }
+  .ft-tab td { border-bottom: 1pt solid #000; padding: 5pt 6pt; }
+  .ft-tab th:first-child, .ft-tab td:first-child { width: 22pt; padding-left: 0; }
+  .ft-tab th:nth-child(3) { width: 22%; } .ft-tab th:nth-child(4) { width: 11%; } .ft-tab th:nth-child(5) { width: 19%; }
+  .ft-tab tr { break-inside: avoid; }
+  .ft-tabua { margin: 8pt 0 10pt; break-inside: avoid; }
+  .ft-tit { font-weight: 700; margin-bottom: 3pt; }
+  .ft-tit span { font-weight: 400; }
+  .ft-barra { display: flex; height: 46pt; border: 1.5pt solid #000; }
+  .ft-peca { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; border-right: 1.5pt solid #000; overflow: hidden; font-size: 10pt; line-height: 1.15; padding: 0 2pt; }
+  .ft-peca b { font-size: 9.5pt; line-height: 1.1; max-width: 100%; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+  .ft-sobra { flex: 1; background: repeating-linear-gradient(45deg, #000 0 1pt, #fff 1pt 6pt); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
 @media print {
   .topo, .no-print, .toast { display: none !important; }
   body { background: #fff; }
