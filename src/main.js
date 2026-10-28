@@ -42,24 +42,114 @@ let aoGuardarPerfil = () => {}; // a cópia online liga-se aqui mais abaixo
 function savePerfil() { try { localStorage.setItem('oficina_perfil', JSON.stringify(perfil)); } catch { /* sem armazenamento */ } aoGuardarPerfil(); }
 const perfil = loadPerfil();
 let guardadoT;
+function piscaGuardado() {
+  $('#p-guardado').hidden = false;
+  clearTimeout(guardadoT);
+  guardadoT = setTimeout(() => ($('#p-guardado').hidden = true), 1500);
+}
 $$('[data-k]').forEach((el) => {
   el.value = perfil[el.dataset.k] ?? '';
   el.addEventListener('input', () => {
     perfil[el.dataset.k] = el.type === 'number' ? val(el) : el.value;
     savePerfil();
-    $('#p-guardado').hidden = false;
-    clearTimeout(guardadoT);
-    guardadoT = setTimeout(() => ($('#p-guardado').hidden = true), 1500);
+    piscaGuardado();
     if (['vx', 'vy', 'vz', 'impressora'].includes(el.dataset.k)) { drawBed(); updateInfo(); }
     equipBanner();
   });
 });
 const bed = () => ({ x: perfil.vx || 220, y: perfil.vy || 220, z: perfil.vz || 250 });
 function equipBanner() {
+  $('#imp-resumo').innerHTML = `${icon('novo')}<span>${esc(perfil.impressora || 'Impressora por indicar')} · ${esc(perfil.material || '')} · ${perfil.vx || 220} × ${perfil.vy || 220} × ${perfil.vz || 250} mm</span>`;
   const f = (perfil.ferramentas || '').trim();
   $('#equip-banner').innerHTML = `${icon('equip')}<span><b>O teu equipamento:</b> ${esc(perfil.impressora || 'impressora por indicar')} · ${esc(perfil.material || '')} · ferramentas de madeira: ${f ? esc(f.length > 60 ? f.slice(0, 60) + '…' : f) : '<span class="warn">por preencher</span>'}</span>`;
 }
+// Ferramentas e materiais: botões de toque + "Outras". Guardam-se como texto (`ferramentas`, `madeiras`), como sempre.
+const FERRAMENTAS = ['Serra circular', 'Serra de mesa', 'Tico-tico', 'Serra de esquadrias', 'Serra manual', 'Berbequim', 'Aparafusadora', 'Tupia', 'Lixadeira orbital', 'Lixadeira de cinta', 'Plaina', 'Formões', 'Esquadros', 'Grampos', 'Nível', 'Fita métrica'];
+const MATERIAIS = ['Pinho', 'Pinho tratado', 'Carvalho', 'Castanho', 'Contraplacado', 'MDF', 'Aglomerado', 'Ripas'];
+const lerLista = (t) => String(t || '').split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean);
+const normTxt = (t) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+function chipsGrupo(chipsEl, outrasEl, chave, lista) {
+  const desenhar = () => {
+    const sel = new Set(), outros = [];
+    for (const it of lerLista(perfil[chave])) {
+      const c = lista.find((l) => normTxt(l) === normTxt(it));
+      if (c) sel.add(c); else outros.push(it);
+    }
+    chipsEl.innerHTML = lista.map((l) => `<button type="button" class="sec${sel.has(l) ? ' on' : ''}" aria-pressed="${sel.has(l)}" data-v="${esc(l)}">${esc(l)}</button>`).join('');
+    outrasEl.value = outros.join(', ');
+  };
+  const guardar = () => {
+    const sel = [...chipsEl.querySelectorAll('.on')].map((b) => b.dataset.v);
+    perfil[chave] = [...sel, ...lerLista(outrasEl.value)].join(', ');
+    savePerfil(); piscaGuardado(); equipBanner();
+  };
+  chipsEl.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    b.classList.toggle('on');
+    b.setAttribute('aria-pressed', String(b.classList.contains('on')));
+    guardar();
+  });
+  outrasEl.addEventListener('input', guardar);
+  desenhar();
+  return desenhar;
+}
+const desenharFerr = chipsGrupo($('#ferr-chips'), $('#ferr-outras'), 'ferramentas', FERRAMENTAS);
+const desenharMat = chipsGrupo($('#mad-chips'), $('#mad-outras'), 'madeiras', MATERIAIS);
+const desenharEquip = () => { desenharFerr(); desenharMat(); };
 equipBanner();
+
+// ================= Aspeto: tema e animações (guardados só neste aparelho) =================
+const PREFS_CHAVE = 'garagem_prefs'; // {animacoes:true|false}; fora da cópia de segurança
+function lerPrefs() { try { return JSON.parse(localStorage.getItem(PREFS_CHAVE) || '{}') || {}; } catch { return {}; } }
+const prefs = lerPrefs();
+function gravarPrefs() { try { localStorage.setItem(PREFS_CHAVE, JSON.stringify(prefs)); } catch { /* sem armazenamento */ } }
+const FUNDO_3D = { claro: 0xf4f8fc, escuro: 0x0c1722 };
+const cenas3D = [];
+let HV = null; // mesa a rodar do Início
+// Só o Blueprint escuro, para já. O claro continua definido no CSS (`:root`); para o voltar a ter: botão no topo + `prefs.tema`.
+const temaAtual = () => 'escuro';
+const sistemaSemMovimento = window.matchMedia('(prefers-reduced-motion: reduce)');
+const movimentoLigado = () => prefs.animacoes !== false && !sistemaSemMovimento.matches;
+function aplicarAspeto() {
+  const t = temaAtual();
+  const raiz = document.documentElement;
+  raiz.setAttribute('data-tema', t);
+  if (prefs.animacoes === false) raiz.setAttribute('data-anim', 'off'); else raiz.removeAttribute('data-anim');
+  for (const v of cenas3D) if (v.scene.background) { v.scene.background = new THREE.Color(FUNDO_3D[t]); v.render(); }
+  const ba = $('#btn-anim');
+  const lig = movimentoLigado();
+  ba.textContent = 'Animações: ' + (lig ? 'ligadas' : 'desligadas');
+  ba.setAttribute('aria-checked', String(lig));
+  ba.disabled = sistemaSemMovimento.matches;
+  $('#anim-nota').textContent = sistemaSemMovimento.matches
+    ? 'O teu aparelho está definido para menos movimento, por isso as animações estão desligadas.'
+    : 'As animações são os pequenos movimentos dos cartões e dos botões. Esta escolha fica guardada neste aparelho.';
+  if (HV) HV.controls.autoRotate = lig;
+}
+$('#btn-anim').addEventListener('click', () => { prefs.animacoes = prefs.animacoes === false; gravarPrefs(); aplicarAspeto(); });
+sistemaSemMovimento.addEventListener('change', aplicarAspeto);
+aplicarAspeto();
+
+// cartões do Início: brilho que segue o rato e inclinação 3D (máx. 4°). Só com rato e com animações ligadas.
+const INTERATIVOS = '.cartao, .tile, .hist-item, .cont-cartao, .of-linha';
+const COM_INCLINACAO = '.cartao, .tile';
+document.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'mouse') return;
+  const c = e.target.closest?.(INTERATIVOS);
+  if (!c) return;
+  const r = c.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+  c.style.setProperty('--mx', (x * 100).toFixed(1) + '%');
+  c.style.setProperty('--my', (y * 100).toFixed(1) + '%');
+  if (!movimentoLigado() || !c.matches(COM_INCLINACAO)) return;
+  c.style.setProperty('--ry', ((x - 0.5) * 8).toFixed(2) + 'deg');
+  c.style.setProperty('--rx', ((0.5 - y) * 8).toFixed(2) + 'deg');
+});
+document.addEventListener('pointerout', (e) => {
+  const c = e.target.closest?.(COM_INCLINACAO);
+  if (c && !c.contains(e.relatedTarget)) { c.style.setProperty('--rx', '0deg'); c.style.setProperty('--ry', '0deg'); }
+});
 
 // ================= Navegação =================
 const TABS = ['inicio', 'pedir', 'projeto', 'peca', 'cortes', 'historico', 'perfil', 'oficina'];
@@ -74,7 +164,6 @@ function showTab(name) {
   const marca = name === 'oficina' ? 'historico' : name;
   $$('#tabs a, #barra a').forEach((b) => b.classList.toggle('on', b.dataset.tab === marca));
   $$('.tab').forEach((t) => t.classList.toggle('on', t.id === 'tab-' + name));
-  $('#mais').hidden = true;
   requestAnimationFrame(() => {
     if (name === 'peca') { PV.resize(); if (geo && !fittedOnce) fitPeca(); }
     if (name === 'projeto') { JV.resize(); if (projItems && !projFitted) setView('3d'); }
@@ -85,9 +174,6 @@ function showTab(name) {
   if (name === 'oficina') { renderOficina(); ligarEcra(); } else desligarEcra();
   window.scrollTo(0, 0);
 }
-$('#mais-abrir').addEventListener('click', () => { $('#mais').hidden = false; });
-$('#mais-fechar').addEventListener('click', () => { $('#mais').hidden = true; });
-$('#mais').addEventListener('click', (e) => { if (e.target === $('#mais') || e.target.closest('a')) $('#mais').hidden = true; });
 window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
 const goto = (name) => { if (location.hash === '#' + name) showTab(name); else location.hash = name; };
 
@@ -101,7 +187,7 @@ function toonGradient() {
 }
 const GRAD = toonGradient();
 
-function makeViewer(el, { bg = 0xf7f0e3, labels = false } = {}) {
+function makeViewer(el, { labels = false } = {}) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.shadowMap.enabled = true;
@@ -114,7 +200,7 @@ function makeViewer(el, { bg = 0xf7f0e3, labels = false } = {}) {
     el.appendChild(lr.domElement);
   }
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(bg);
+  scene.background = new THREE.Color(FUNDO_3D[temaAtual()]);
   const camera = new THREE.PerspectiveCamera(35, 1, 1, 50000);
   camera.up.set(0, 0, 1);
   camera.position.set(300, -400, 300);
@@ -174,6 +260,7 @@ function makeViewer(el, { bg = 0xf7f0e3, labels = false } = {}) {
   };
   controls.addEventListener('change', v.render);
   new ResizeObserver(v.resize).observe(el);
+  cenas3D.push(v);
   return v;
 }
 
@@ -200,7 +287,7 @@ $('#areas-chips').addEventListener('click', (e) => {
   area = area === b.dataset.area ? '' : b.dataset.area;
   $$('#areas-chips button').forEach((x) => x.classList.toggle('on', x.dataset.area === area));
 });
-$('#modos').innerHTML = Object.entries(MODOS).map(([k, m]) => `<button class="tile" data-modo="${k}"><span class="ci">${icon(MODO_INFO[k].i)}</span><span><b>${m.nome}</b><span class="d">${MODO_INFO[k].d}</span></span></button>`).join('');
+$('#modos').innerHTML = Object.entries(MODOS).map(([k, m], n, todos) => `<button class="tile" data-modo="${k}"><span class="nc">${String(n + 1).padStart(2, '0')} / ${String(todos.length).padStart(2, '0')}</span><span class="ci">${icon(MODO_INFO[k].i)}</span><span><b>${m.nome}</b><span class="d">${MODO_INFO[k].d}</span></span></button>`).join('');
 function setStep(n) {
   $$('#stepper li').forEach((li) => { const s = Number(li.dataset.s); li.className = s === n ? 'on' : s < n ? 'feito' : ''; });
   $$('.passo').forEach((p) => (p.hidden = Number(p.dataset.passo) !== n));
@@ -276,7 +363,7 @@ $('#copiar').addEventListener('click', async () => {
 
 // ================= Peça 3D =================
 const viewerEl = $('#viewer');
-const PV = makeViewer(viewerEl, { bg: 0xe9e1d3 });
+const PV = makeViewer(viewerEl);
 const CORES_PLA = { Laranja: '#e8742a', Branco: '#f2efe8', Preto: '#2f2f31', Cinzento: '#8d939a', Azul: '#2f6db5', Verde: '#3f8f4a', Vermelho: '#c8372d', Amarelo: '#e9c23a' };
 $('#cores-pla').innerHTML = Object.entries(CORES_PLA).map(([n, c]) => `<button style="background:${c}" data-cor="${c}" title="${n}" aria-label="${n}"></button>`).join('');
 const matPeca = new THREE.MeshStandardMaterial({ color: perfil.corPLA, roughness: 0.62, metalness: 0.02, flatShading: true });
@@ -287,6 +374,7 @@ $('#cores-pla').addEventListener('click', (e) => {
   if (!b) return;
   perfil.corPLA = b.dataset.cor;
   savePerfil();
+  desenharEquip();
   matPeca.color.set(perfil.corPLA);
   marcarCor();
   PV.render();
@@ -320,6 +408,8 @@ function drawBed() {
 }
 
 let geo = null;
+let pecaVista = 'escolha'; // escolha | fazer | alterar | editar
+let pecaModo = null; // fazer | alterar: como a peça aberta chegou cá
 let mesh = null;
 let previewMesh = null;
 let previewMode = null;
@@ -464,6 +554,7 @@ function setGeo(g, msg, { fit = false, noHistory = false } = {}) {
   faixaInfo = null;
   if (geo && !noHistory) { history.push(geo); if (history.length > 30) history.shift(); }
   geo = g;
+  pecaVista = 'editar';
   showMesh();
   previewMode = null;
   updatePreview();
@@ -472,6 +563,7 @@ function setGeo(g, msg, { fit = false, noHistory = false } = {}) {
   if (fit || !fittedOnce) fitPeca();
   $('#desfazer').disabled = history.length === 0;
   avisoPeca();
+  painelPeca();
   if (msg) toast(msg);
   PV.render();
 }
@@ -549,6 +641,7 @@ async function loadFile(file) {
     const g = G.placeOnBed(G.clean(raw));
     history.length = 0;
     $('#nome-saida').value = file.name.replace(/\.stl$/i, '') + '_alterada.stl';
+    pecaModo = 'alterar';
     setGeo(g, `Aberto: ${file.name}`, { fit: true, noHistory: true });
     refreshAxisUI(true);
     $('#desfazer').disabled = true;
@@ -579,6 +672,7 @@ $('#gerar').addEventListener('click', () => later(() => {
     for (const v of Object.values(p)) if (!(v >= 0) || !isFinite(v)) throw new Error('Há um campo com valor inválido.');
     const out = G.placeOnBed(buildSpec(GERADORES[gerSel.value].gerar(p)));
     $('#nome-saida').value = gerSel.value + '.stl';
+    pecaModo = 'fazer';
     setGeo(out, 'Peça criada.', { fit: true });
     refreshAxisUI(true);
     rodarAoEntrar();
@@ -598,6 +692,7 @@ $('#construir').addEventListener('click', () => {
         out = G.placeOnBed(out);
         $('#nome-saida').value = slug(spec.nome || 'peca') + '.stl';
       }
+      if (!usarBase) pecaModo = 'fazer';
       setGeo(out, usarBase ? 'Alterações aplicadas.' : 'Peça construída.', { fit: !usarBase });
       refreshAxisUI(true);
       if (!usarBase) rodarAoEntrar();
@@ -607,6 +702,36 @@ $('#construir').addEventListener('click', () => {
     }
   });
 });
+// Painel da Peça 3D: primeiro escolhe-se fazer ou alterar; só depois aparecem medidas, alterações e guardar.
+function painelPeca() {
+  const temGeo = !!geo;
+  const editar = pecaVista === 'editar' && temGeo;
+  const alterar = editar && pecaModo === 'alterar';
+  $('#peca-escolha').hidden = pecaVista !== 'escolha';
+  $('#peca-continuar').hidden = !temGeo;
+  $('#caminho-fazer').hidden = pecaVista !== 'fazer';
+  $('#caminho-alterar').hidden = pecaVista !== 'alterar';
+  $('#peca-topo').hidden = !editar;
+  $('#sec-claude').hidden = !alterar;
+  for (const id of ['sec-medidas', 'sec-alterar', 'sec-guardar']) $('#' + id).hidden = !editar;
+  const slot = alterar ? $('#slot-claude') : $('#slot-fazer');
+  if (!slot.contains($('#importar-claude'))) slot.appendChild($('#importar-claude'));
+  $('#json-base').checked = alterar;
+  $('#peca-nome').textContent = 'Peça aberta: ' + ($('#nome-saida').value.replace(/\.stl$/i, '') || 'sem nome');
+  if (!editar && previewMode) { previewMode = null; updatePreview(); }
+}
+$('#peca-tiles').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-caminho]');
+  if (!b) return;
+  pecaVista = b.dataset.caminho;
+  painelPeca();
+});
+$('#peca-continuar-btn').addEventListener('click', () => { pecaVista = 'editar'; painelPeca(); });
+$$('[data-peca-voltar]').forEach((b) => b.addEventListener('click', () => { pecaVista = geo ? 'editar' : 'escolha'; painelPeca(); }));
+$('#peca-mudar').addEventListener('click', () => { pecaVista = 'escolha'; painelPeca(); });
+painelPeca();
+$('#nome-saida').addEventListener('input', () => painelPeca());
+
 const slug = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'peca';
 
 function onMedida(changed) {
@@ -676,7 +801,7 @@ $('#guardar-duas').addEventListener('click', () => {
 
 // ================= Ver projeto =================
 const projEl = $('#proj-viewer');
-const JV = makeViewer(projEl, { bg: 0xf7f0e3, labels: true });
+const JV = makeViewer(projEl, { labels: true });
 let projRoot = null;
 let projItems = null;
 let projData = null;
@@ -1009,18 +1134,18 @@ $('#proj-imagem').addEventListener('click', () => {
 });
 
 // ================= Início (mesa a rodar) =================
-let HV = null;
 let heroOn = false;
 function heroStart() {
   if (!HV) {
-    HV = makeViewer($('#hero3d'), { bg: 0xf6eee1 });
+    HV = makeViewer($('#hero3d'));
     HV.controls.enableZoom = false;
     HV.controls.enablePan = false;
-    HV.controls.autoRotate = true;
+    HV.controls.autoRotate = movimentoLigado();
     HV.controls.autoRotateSpeed = 1.2;
     const b = buildProjectScene(PJ.parseProject(PJ.EXEMPLO_PROJETO), { labels: false });
     HV.scene.add(b.root, addGround(HV, b.box));
     HV.scene.background = null;
+    cenas3D.splice(cenas3D.indexOf(HV), 1);
     HV.renderer.setClearAlpha(0);
     HV.resize();
     HV.fit(b.box.clone().expandByScalar(20), new THREE.Vector3(0.9, -1.25, 0.75), 0.95);
@@ -1280,7 +1405,7 @@ function renderContinuar() {
   const proj = vis.filter((e) => e.estado === 'projeto').sort((a, b) => b.atualizado - a.atualizado)
     .find((e) => { const p = progressoCortes(e); return p && p.feitos < p.total; });
   const reps = vis.filter((e) => e.modo === 'reparacao' && e.estado !== 'resolvida').slice(0, 2);
-  let h = proj || reps.length ? '<h2>Continuar</h2>' : '<h2>O que vamos fazer?</h2>';
+  let h = proj || reps.length ? '<h2>Continuar</h2>' : '<h2>O que vamos fazer?</h2><p class="muted">Ainda não há nada em curso. Pede ajuda para uma reparação ou para um projeto.</p>';
   if (proj) {
     const p = progressoCortes(proj);
     h += `<div class="cont-cartao"><h3>${icon('madeira')}${esc(H.titulo(proj, NOMES_MODO))}</h3><p>${p.feitos} de ${p.total} cortes feitos</p><a class="btn grande" href="#oficina=${esc(proj.id)}">${icon('oficina')}Abrir na oficina</a></div>`;

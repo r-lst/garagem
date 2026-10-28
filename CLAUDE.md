@@ -15,8 +15,17 @@ App web estática para marcenaria e impressão 3D, com um Cloudflare Worker para
 - Chaves no localStorage (não renomear sem migrar os dados, senão o pai perde o que tem):
   - `oficina_perfil`: equipamento
   - `garagem_historico`: histórico de pedidos e projetos
+  - `garagem_prefs`: aspeto deste aparelho (`animacoes` true|false; `tema` reservado). Fora da cópia de segurança e da cópia online
   - `garagem_sync`: chave da cópia online, `perfilAtualizado`, `conhecidos` (sha de cada ficheiro online), hora da última sincronização
 - Não commitar `node_modules/` nem `dist/` (já estão no `.gitignore`).
+
+## Aspeto (Blueprint)
+- **Só o Blueprint escuro, para já** (decisão do Leston; sem botão de tema). O Blueprint claro (papel de planta) continua no CSS em `:root`, sem uso. Tudo por variáveis CSS em `:root` e `:root[data-tema="escuro"]` (`style.css`); não pôr cores fixas fora das variáveis. O tema aplica-se por um script no `<head>`, para não piscar.
+- Laranja: `--accent` (#C2571A) só em detalhes grandes (contornos, brilho, ícones); texto pequeno usa `--accent-t` (#9B4211) e botões `--accent-b` (#B34E12), porque o #C2571A não chega a 4,5:1.
+- Mínimos: texto 18 px (≥ .95rem), alvos 48 px, foco `:focus-visible`, animações < 300 ms, nada a piscar. `prefers-reduced-motion` e o interruptor Animações (Equipamento → Aspeto, `data-anim="off"`) desligam todo o movimento.
+- Superfícies interativas (`.cartao`, `.tile`, `.hist-item`, `.cont-cartao`, `.of-linha`): brilho que segue o rato, linha de luz no topo, contorno laranja e ícone animado no hover/foco (variáveis `--mx --my --rx --ry`, JS delegado em `main.js`, só com rato). Inclinação só em `.cartao` e `.tile`. O ícone de cada tipo anima pela classe `i-<nome>` que o `icon()` põe no SVG: ao criar um ícone novo, acrescentar a regra em `style.css`.
+- Blocos, passos e tipos de trabalho entram com fade e subida escalonados; cada separador abre com um título com ícone (`.titulo-tab`).
+- O fundo das cenas 3D muda com o tema (`FUNDO_3D`).
 
 ## Estrutura (`src/`)
 | Ficheiro | Faz |
@@ -56,7 +65,7 @@ A página só fala com o **Worker da Garagem** (`WORKER_URL`), e só para os uso
 - Mudar o formato: atualizar `historico.js`, `test-historico.mjs` e manter a leitura das entradas antigas.
 
 ## Telemóvel (até 700 px de largura)
-- O menu de cima dá lugar a uma barra em baixo: Início, Projetos (= Histórico), Pedir, Cortes, Mais (Ver projeto, Peça 3D, Equipamento). Decide-se pela largura, não pelo aparelho.
+- O menu de cima dá lugar a uma barra em baixo: Início, Projetos (= Histórico), Pedir, Cortes. Sem "Mais": Ver projeto, Peça 3D e Equipamento só no computador. Decide-se pela largura, não pelo aparelho.
 - Início mostra "Continuar": o projeto mais recente com cortes por fazer e até 2 reparações por resolver. A apresentação e a mesa 3D só no computador.
 - **Modo oficina** (`#oficina=<id>`, também no computador): Cortar / Comprar / Montar. Tocar numa linha risca-a (fica em `oficina` na entrada e vai na cópia online); o riscado desce para o fim do grupo. Montar mostra a `resposta` guardada. Ecrã sempre ligado (Wake Lock) enquanto está aberto.
 - As chaves das linhas (`oficina.js`) não dependem do comprimento da tábua: mudar a tábua em Cortes não perde o que foi riscado. Não as mudar sem migrar.
@@ -85,6 +94,12 @@ A página só fala com o **Worker da Garagem** (`WORKER_URL`), e só para os uso
 - Imprime só `#folha` (`body.a-imprimir`, tirado no `afterprint`). Estilo só dentro de `@media print`, em pt; preto e branco; a sobra tracejada usa `print-color-adjust: exact`.
 - Para ver o resultado sem impressora: Edge sem janela com `--print-to-pdf` sobre uma cópia do `dist/index.html` que carrega no botão.
 
+## Peça 3D: fluxo
+- Abre com duas escolhas: **Fazer uma peça nova** (criar peça simples, ou colar o bloco do Claude) e **Alterar uma peça que já tenho** (abrir STL; depois também "Pedir alterações ao Claude", aplicado sobre a peça aberta). Só com a peça aberta aparecem Medidas, Alterar e Guardar (`painelPeca()` em `main.js`; estado `pecaVista`/`pecaModo`). "Mudar de peça" volta às duas escolhas, com "Continuar com a peça aberta".
+
+## Equipamento
+- Impressora num resumo de uma linha, com "Mudar a impressora" (modelo, material, bico, programa, volume). Ferramentas e materiais são botões de toque + campo "Outras"; continuam guardados como texto em `ferramentas` e `madeiras` (o que não corresponde a um botão vai para "Outras", nada se perde). Notas escondidas até serem precisas.
+
 ## Caber na impressora (Peça 3D)
 - Limites: os do Equipamento (`vx`, `vy`, `vz`; por omissão a K1, 220 × 220 × 250 mm). Folga de 0,01 mm.
 - `G.rodarParaCaber` tenta, por esta ordem: rodar 90° na mesa → diagonal da mesa (estas duas mantêm a face de baixo) → virar para outra face → virada e na diagonal. Não trocar a ordem: uma barra fina ficava de pé.
@@ -103,7 +118,7 @@ npm ci
 npm test         # lógica: geometria, cortes, projetos, pedidos, histórico, Worker (GitHub simulado), folha de cortes
 npm run build    # gera dist/index.html
 ```
-Abrir `dist/index.html` no browser (duplo clique) e experimentar: Início; Pedir ao Claude (3 passos); Ver projeto → "Ver um exemplo"; Peça 3D → criar suporte em L, furar, cortar, guardar; criar uma placa de 280 × 40 (deve rodar para a diagonal e avisar) e uma de 400 × 300 (deve dizer que excede); Cortes; Ver projeto → "Imprimir folha de cortes" (pré-visualização de impressão: A4, preto e branco, 2 páginas no exemplo); Histórico (fazer um pedido de madeira, desenhar, "Ver em 3D", apagar, guardar/recuperar cópia); a 375 px: barra em baixo, Início → Continuar → Abrir na oficina, riscar um corte, Montar → Guardar a resposta, Mais.
+Abrir `dist/index.html` no browser (duplo clique) e experimentar: Início; Pedir ao Claude (3 passos); Ver projeto → "Ver um exemplo"; Peça 3D → criar suporte em L, furar, cortar, guardar; criar uma placa de 280 × 40 (deve rodar para a diagonal e avisar) e uma de 400 × 300 (deve dizer que excede); Cortes; Ver projeto → "Imprimir folha de cortes" (pré-visualização de impressão: A4, preto e branco, 2 páginas no exemplo); Histórico (fazer um pedido de madeira, desenhar, "Ver em 3D", apagar, guardar/recuperar cópia); a 375 px: barra em baixo, Início → Continuar → Abrir na oficina, riscar um corte, Montar → Guardar a resposta.
 Os testes automáticos não cobrem a interface. Depois de mexer em UI, abrir a página e verificar à mão.
 
 ## Ramos e publicação
