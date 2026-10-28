@@ -70,7 +70,7 @@ A página só fala com o **Worker da Garagem** (`WORKER_URL`), e só para os uso
 - **Modo oficina** (`#oficina=<id>`, também no computador): Cortar / Comprar / Montar. Tocar numa linha risca-a (fica em `oficina` na entrada e vai na cópia online); o riscado desce para o fim do grupo. Montar mostra a `resposta` guardada. Ecrã sempre ligado (Wake Lock) enquanto está aberto.
 - As chaves das linhas (`oficina.js`) não dependem do comprimento da tábua: mudar a tábua em Cortes não perde o que foi riscado. Não as mudar sem migrar.
 - Sem modo offline: há sempre internet na garagem (decisão do Leston). Mantém-se o ficheiro único.
-- `.so-pc` esconde coisas no telemóvel (ex.: "Ver em 3D" no Histórico). As regras do menu de cima são `#tabs`, não `nav` (a barra também é um `nav`).
+- `.so-pc` esconde coisas no telemóvel (ex.: "Ver em 3D" e a cópia de segurança no Histórico, o Ctrl+V e o "Ir para Ver projeto" no Pedir); `.so-tel` mostra só no telemóvel. As regras do menu de cima são `#tabs`, não `nav` (a barra também é um `nav`).
 
 ## Reparações
 - Tipo `reparacao` no Pedir ao Claude (e cartão no Início). Passo 2: área opcional (`AREAS_REPARACAO`) e "O que se passa?". Passo 3: lembra de juntar fotos na conversa do Claude. A página não vê nem envia as fotos.

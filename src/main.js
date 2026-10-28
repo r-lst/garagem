@@ -337,6 +337,10 @@ $('#criar').addEventListener('click', () => {
   const ir = $('#ir-destino');
   ir.hidden = !d;
   if (d) { ir.href = d[0]; ir.innerHTML = icon('seta') + d[1]; }
+  const soPc = !!d && d !== DESTINO.historico;
+  ir.classList.toggle('so-pc', soPc);
+  $('#pos-passos').classList.toggle('so-pc', soPc);
+  $('#pos-pc').hidden = !soPc;
   $('#copiado').hidden = true;
   if (H.MODOS_HIST.includes(modo)) {
     const r = H.registarPedido(hist, { id: pedidoAtualId, modo, texto, pedido: $('#saida').value, area: areaPedido });
@@ -1303,7 +1307,7 @@ $('#hist-lista').addEventListener('click', async (ev) => {
     goto('projeto');
     later(() => readProj(false));
   } else if (b.dataset.acao === 'copiar') {
-    if (await copiarTexto(e.pedido)) toast('Pedido copiado. Cola-o no Claude com Ctrl + V.');
+    if (await copiarTexto(e.pedido)) toast('Pedido copiado. Cola-o no Claude.');
     else toast('Não consegui copiar. Faz o pedido outra vez em "Pedir ao Claude".', true);
   } else if (b.dataset.acao === 'resp-editar') {
     editarResposta = e.id;

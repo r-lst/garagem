@@ -489,3 +489,11 @@ html[data-anim="off"] :is(.cartao, .tile, .hist-item, .cont-cartao, .of-linha, .
   .cont-botoes { grid-template-columns: 1fr; }
   .cont-botoes .btn, .cont-botoes button { width: 100%; }
 }
+
+.so-tel { display: none; }
+@media (max-width: 700px) {
+  .so-tel:not([hidden]) { display: revert; }
+  .grid3 { grid-template-columns: 1fr 1fr; }
+  .grid3 > div:last-child { grid-column: 1 / -1; }
+  #abrir-claude { padding-left: 12px; padding-right: 12px; white-space: nowrap; }
+}

@@ -92,11 +92,12 @@
     <div class="acoes">
       <div class="acao"><b>1</b><div><h4>Copiar o pedido</h4><button id="copiar" class="grande" data-i="copiar">Copiar pedido</button><span id="copiado" class="ok" hidden></span></div></div>
       <div class="acao"><b>2</b><div><h4>Abrir o Claude</h4><a id="abrir-claude" class="btn sec grande" href="https://claude.ai/new" target="_blank" rel="noopener" data-i="abrir">Abrir o Claude</a></div></div>
-      <div class="acao"><b>3</b><div><h4 id="colar-t">Colar e enviar</h4><p>Clica na caixa de texto do Claude, carrega <kbd>Ctrl</kbd> + <kbd>V</kbd><span id="colar-foto" hidden>, junta uma ou duas fotos da avaria</span> e envia. Responde às perguntas uma a uma.</p><p class="muted" id="foto-como" hidden>Para juntar a foto: no computador, carrega no clipe da caixa do Claude ou arrasta a foto para lá; no telemóvel, carrega no + e escolhe a foto.</p></div></div>
+      <div class="acao"><b>3</b><div><h4 id="colar-t">Colar e enviar</h4><p>Clica na caixa de texto do Claude, <span class="so-pc">carrega <kbd>Ctrl</kbd> + <kbd>V</kbd></span><span class="so-tel">toca e escolhe <b>Colar</b></span><span id="colar-foto" hidden>, junta uma ou duas fotos da avaria</span> e envia. Responde às perguntas uma a uma.</p><p class="muted" id="foto-como" hidden>Para juntar a foto: no computador, carrega no clipe da caixa do Claude ou arrasta a foto para lá; no telemóvel, carrega no + e escolhe a foto.</p></div></div>
     </div>
     <div class="depois">
       <h3>Quando o Claude terminar</h3>
       <p id="pos-passos"></p>
+      <p id="pos-pc" class="so-tel" hidden><b>Guarda a resposta do Claude e continua no computador.</b> É lá que se vê o desenho.</p>
       <a class="btn" id="ir-destino" href="#projeto" data-i="seta">Ir</a>
     </div>
     <details class="ver-pedido"><summary>Ver o pedido completo</summary><textarea id="saida" rows="16" readonly class="code"></textarea></details>
@@ -334,7 +335,7 @@
     <div class="cabeca"><h2 class="titulo-tab"><span class="ci cab" data-i="historico"></span>Histórico</h2><p class="muted">Os teus pedidos e projetos de madeira, do mais recente para o mais antigo. Ficam guardados neste aparelho.</p></div>
     <div id="hist-sync" class="hist-sync" hidden></div>
     <div id="hist-lista" class="hist-lista"></div>
-    <div class="bloco hist-copia">
+    <div class="bloco hist-copia so-pc">
       <h3>Cópia de segurança</h3>
       <p class="muted">Guarda num ficheiro o histórico e o equipamento. Serve para não perder nada se mudares de computador ou limpares o browser.</p>
       <div class="row"><button class="sec" id="hist-exportar" data-i="guardar">Guardar uma cópia</button><label class="btn sec ficheiro-btn" data-i="abrirficheiro"><span>Recuperar uma cópia</span><input type="file" id="hist-importar" accept=".json,application/json"></label></div>
