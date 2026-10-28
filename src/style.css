@@ -241,7 +241,7 @@ details.sub > summary { font-size: 1.02rem; font-family: var(--sans); }
 .slider { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-weight: 600; background: var(--card); border: 2px solid var(--line-2); border-radius: 12px; padding: 4px 12px; min-height: 48px; }
 .slider input { width: 120px; accent-color: var(--accent); }
 .ferramentas .tog { margin: 0; background: var(--card); border: 2px solid var(--line-2); border-radius: 12px; padding: 4px 12px; min-height: 48px; }
-.cores { display: inline-flex; gap: 6px; margin-left: auto; }
+.cores { display: inline-flex; flex-wrap: wrap; max-width: 100%; gap: 6px; margin-left: auto; }
 .cores button { width: 48px; height: 48px; min-height: 0; padding: 0; border-radius: 50%; border: 8px solid var(--card); background-clip: padding-box; box-shadow: 0 0 0 1px var(--line-2) inset; }
 .cores button.on { box-shadow: 0 0 0 3px var(--accent) inset; }
 .cores button:active { transform: none; }
@@ -322,7 +322,7 @@ body.busy::after { content: "A processar…"; position: fixed; inset: 0; backgro
   .hero-3d { height: 320px; }
 }
 @media (max-width: 1000px) {
-  .split { grid-template-columns: 1fr; }
+  .split { grid-template-columns: minmax(0, 1fr); }
   .viewcol { position: static; order: -1; }
   .passos3 { grid-template-columns: 1fr; }
   #tabs a span { display: none; }
@@ -340,9 +340,9 @@ body.busy::after { content: "A processar…"; position: fixed; inset: 0; backgro
 .of-linha:active { transform: translateY(1px); box-shadow: var(--sh); }
 .of-cx { flex: none; width: 34px; height: 34px; border: 3px solid var(--ink-2); border-radius: 8px; display: flex; align-items: center; justify-content: center; background: var(--card); }
 .of-cx .ic { width: 26px; height: 26px; }
-.of-nome { flex: 1; min-width: 0; font-size: 1.15rem; font-weight: 700; overflow-wrap: anywhere; }
+.of-nome { flex: 1 1 40%; min-width: 7ch; font-size: 1.15rem; font-weight: 700; overflow-wrap: anywhere; }
 .of-nome small { display: block; font-weight: 400; font-size: .95rem; color: var(--muted); }
-.of-med { flex: none; text-align: right; font-family: var(--slab); font-size: 1.35rem; font-weight: 700; color: var(--accent-t); white-space: nowrap; }
+.of-med { flex: 0 1 auto; max-width: 58%; text-align: right; font-family: var(--slab); font-size: 1.35rem; font-weight: 700; color: var(--accent-t); white-space: normal; overflow-wrap: anywhere; }
 .of-med small { display: block; font-family: var(--sans); font-size: .95rem; color: var(--ink-2); }
 .of-linha.feito { background: var(--paper-2); border-color: var(--line); box-shadow: none; }
 .of-linha.feito .of-cx { background: var(--ok); border-color: var(--ok); color: var(--card); }
