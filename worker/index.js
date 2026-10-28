@@ -184,19 +184,25 @@ async function perguntarGemini(env, texto, area, fotos) {
   const partes = [{ text: PEDIDO_GEMINI(texto, area) }, ...fotos.map((data) => ({ inline_data: { mime_type: 'image/jpeg', data } }))];
   const corpo = JSON.stringify({ contents: [{ parts: partes }], generationConfig: { temperature: 0.2, maxOutputTokens: 1500 } });
   let ultimo = 'sem modelos';
+  const falhas = []; // o que correu mal antes de um modelo responder, para diagnóstico
   for (const modelo of modelos) {
     let r;
     try {
       r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:generateContent`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY }, body: corpo,
       });
-    } catch { ultimo = modelo + ': sem ligação'; continue; }
+    } catch { ultimo = modelo + ': sem ligação'; falhas.push(ultimo); continue; }
     if (r.status === 401 || r.status === 403) throw new ErroGemini('A chave do Gemini não está a funcionar.', 502, `${modelo}: ${r.status}`);
-    if (!r.ok) { ultimo = `${modelo}: ${r.status}`; continue; }
+    if (!r.ok) {
+      const e = await r.json().catch(() => null);
+      ultimo = `${modelo}: ${r.status}${e?.error?.message ? ' ' + String(e.error.message).slice(0, 140) : ''}`;
+      falhas.push(ultimo);
+      continue;
+    }
     const d = await r.json().catch(() => null);
     const txt = (d?.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('').trim();
-    if (!txt) { ultimo = `${modelo}: resposta vazia`; continue; }
-    return { descricao: txt, modelo };
+    if (!txt) { ultimo = `${modelo}: resposta vazia`; falhas.push(ultimo); continue; }
+    return { descricao: txt, modelo, falhas };
   }
   throw new ErroGemini('Hoje já não dá para descrever as fotos. Copia o pedido na mesma; o Claude vê as fotos se as juntares lá.', 503, ultimo);
 }
@@ -228,7 +234,7 @@ async function descrever(b, env, h) {
       if (await commitar(env, entradas, `Garagem: ${fotos.length} foto${fotos.length === 1 ? '' : 's'} (${id})`)) guardadas = fotos.length;
     } catch (e) { if (!(e instanceof ErroGitHub)) throw e; }
   }
-  return json({ descricao: r.descricao, modelo: r.modelo, guardadas }, 200, h);
+  return json({ descricao: r.descricao, modelo: r.modelo, falhas: r.falhas, guardadas }, 200, h);
 }
 
 export default {

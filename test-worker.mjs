@@ -168,6 +168,7 @@ gemini.estado['gemini-3.8-flash'] = 429;
 r = await descrever({ id: idFoto, fotos: [foto(3)] });
 d = await r.json();
 ok(r.status === 200 && d.modelo === 'gemini-3.6-flash', '429 no primeiro: passa ao segundo');
+ok(d.falhas.length === 1 && /gemini-3.8-flash: 429/.test(d.falhas[0]), 'a resposta diz porque o primeiro falhou');
 ok(gh.chamadas - antes <= 7, `fotos num só commit (${gh.chamadas - antes} pedidos ao GitHub)`);
 gemini.estado['gemini-3.6-flash'] = 404;
 r = await descrever({ fotos: [foto(1)] });
