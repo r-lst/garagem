@@ -9,7 +9,8 @@ import { GERADORES, buildSpec, extractJSON } from './shapes.js';
 import { parseLines, planGroups } from './cuts.js';
 import { buildPrompt, MODOS, AREAS_REPARACAO } from './prompts.js';
 import { folhaCortes } from './folha.js';
-import { listasOficina, progresso } from './oficina.js';
+import { listasOficina, progresso, listaCompras, textoCompras } from './oficina.js';
+import * as F from './ferramentas.js';
 import { icon, fillIcons } from './icons.js';
 import * as H from './historico.js';
 import { sincronizar, lerConfig, gravarConfig, chaveDoLink } from './sync.js';
@@ -153,7 +154,8 @@ document.addEventListener('pointerout', (e) => {
 });
 
 // ================= Navegação =================
-const TABS = ['inicio', 'pedir', 'projeto', 'peca', 'cortes', 'historico', 'perfil', 'oficina'];
+const TABS = ['inicio', 'pedir', 'projeto', 'peca', 'ferramentas', 'cortes', 'temporizador', 'medidas', 'tinta', 'madeiras', 'historico', 'perfil', 'oficina'];
+const FERR_TABS = ['cortes', 'temporizador', 'medidas', 'tinta', 'madeiras']; // abrem a partir de Ferramentas
 const telemovel = () => window.matchMedia('(max-width: 700px)').matches;
 let tabAtual = '';
 let oficinaId = null; // projeto aberto no modo oficina (#oficina=<id>)
@@ -162,7 +164,7 @@ function showTab(name) {
   if (!TABS.includes(name)) name = 'inicio';
   if (name === 'oficina' && !hist.some((e) => e.id === oficinaId && e.projeto && !e.apagado)) name = 'historico';
   tabAtual = name;
-  const marca = { oficina: 'historico', projeto: 'historico', peca: 'pedir' }[name] || name;
+  const marca = { oficina: 'historico', projeto: 'historico', peca: 'pedir' }[name] || (FERR_TABS.includes(name) ? 'ferramentas' : name);
   $$('#tabs a, #barra a').forEach((b) => b.classList.toggle('on', b.dataset.tab === marca));
   $$('.tab').forEach((t) => t.classList.toggle('on', t.id === 'tab-' + name));
   requestAnimationFrame(() => {
@@ -172,6 +174,10 @@ function showTab(name) {
   });
   if (name === 'historico') { renderHist(); agendarSync(100); }
   if (name === 'inicio') renderContinuar();
+  if (name === 'temporizador') renderTemp();
+  if (name === 'medidas') renderMedidas();
+  if (name === 'tinta') renderTinta();
+  if (name === 'madeiras') renderMadeiras();
   if (name === 'oficina') { renderOficina(); ligarEcra(); } else desligarEcra();
   window.scrollTo(0, 0);
 }
@@ -361,6 +367,7 @@ function escolherModo(b) {
   mostrarFotos();
   $('#pedido-dicas').innerHTML = rep ? DICAS.reparacao : DICAS.normal;
   avisoPeca();
+  renderPedidoMedidas();
   setStep(2);
   setTimeout(() => $('#pedido').focus(), 300);
 }
@@ -1500,12 +1507,45 @@ function linhaOficina(tipo, chave, feito, nome, sub, med, medSub) {
     <span class="of-nome">${esc(nome)}${sub ? `<small>${esc(sub)}</small>` : ''}</span>
     <span class="of-med">${esc(med)}${medSub ? `<small>${esc(medSub)}</small>` : ''}</span></button>`;
 }
+const EXTRAS_COMUNS = ['Lixa', 'Cola', 'Verniz', 'Tinta', 'Parafusos', 'Buchas', 'Pincel', 'Fita de pintor', 'Luvas'];
+function linhaCompra(i) {
+  const cls = i.estado === 'comprado' ? ' feito' : i.estado === 'tenho' ? ' tenho' : '';
+  const estado = { tenho: 'já tenho', comprado: 'comprado' }[i.estado] || '';
+  const linha = `<button class="of-linha${cls}" data-tipo="compra" data-chave="${esc(i.chave)}" aria-label="${esc(i.texto)}: ${estado || 'por comprar'}">
+    <span class="of-cx">${i.estado === 'comprado' ? icon('certo') : i.estado === 'tenho' ? icon('inicio') : ''}</span>
+    <span class="of-nome">${esc(i.texto)}${estado ? `<small>${estado}</small>` : ''}</span>
+    ${i.qtd ? `<span class="of-med">${esc(i.qtd)}</span>` : ''}</button>`;
+  return i.extra ? `<div class="of-extra">${linha}<button class="sec" data-extra-tirar="${esc(i.chave)}" aria-label="Tirar ${esc(i.texto)} da lista">${icon('apagar')}</button></div>` : linha;
+}
+function blocoExtras(compras) {
+  const tem = new Set(compras.map((i) => i.texto.toLowerCase()));
+  const chips = EXTRAS_COMUNS.filter((x) => !tem.has(x.toLowerCase())).map((x) => `<button type="button" data-extra-juntar="${esc(x)}">${esc(x)}</button>`).join('');
+  return `<div class="of-add bloco">
+    <h3>Juntar à lista</h3>
+    ${chips ? `<div class="chips">${chips}</div>` : ''}
+    <div class="row"><input type="text" id="of-extra-txt" placeholder="Outra coisa" aria-label="Outra coisa para comprar" autocomplete="off"><button class="sec" data-acao-of="extra-add">${icon('juntar')}Juntar</button></div>
+    <div class="row"><button data-acao-of="partilhar">${icon('partilhar')}Partilhar a lista</button></div>
+    <p class="muted">Manda por mensagem só o que ainda falta comprar.</p>
+  </div>`;
+}
+async function partilharCompras() {
+  const e = hist.find((x) => x.id === oficinaId && !x.apagado), l = e && listasDe(e);
+  if (!l) return;
+  const txt = textoCompras(l.nome, listaCompras(l, e.oficina || {}, H.estadoCompra));
+  if (!txt) { toast('Já não falta comprar nada.'); return; }
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Compras', text: txt }); return; } catch (err) { if (err?.name === 'AbortError') return; }
+  }
+  if (await copiarTexto(txt)) toast('Lista copiada. Cola-a numa mensagem.'); else toast('Não consegui copiar a lista.', true);
+}
 function renderOficina() {
   const e = hist.find((x) => x.id === oficinaId && !x.apagado);
   const l = e && listasDe(e);
   if (!l) { $('#of-nome').textContent = 'Projeto'; $('#of-corpo').innerHTML = '<p class="erro on">Não consegui ler este projeto.</p>'; return; }
-  const rc = e.oficina?.cortar || {}, rb = e.oficina?.comprar || {};
-  const pc = progresso(l.cortar.flatMap((g) => g.itens), rc), pb = progresso(l.comprar, rb);
+  const rc = e.oficina?.cortar || {};
+  const compras = listaCompras(l, e.oficina || {}, H.estadoCompra);
+  const pc = progresso(l.cortar.flatMap((g) => g.itens), rc), pb = progresso(compras, Object.fromEntries(compras.filter((i) => i.estado).map((i) => [i.chave, true])));
+  const escrito = $('#of-extra-txt'), tinhaFoco = escrito && document.activeElement === escrito, textoEscrito = escrito?.value || '';
   $('#of-nome').textContent = l.nome;
   $('#of-sub').textContent = [l.medidas.map((v) => fmt(v, 0)).join(' × ') + ' mm', l.madeira, wake ? 'ecrã sempre ligado' : ''].filter(Boolean).join(' · ');
   const nomes = { cortar: `Cortar ${pc.feitos}/${pc.total}`, comprar: `Comprar ${pb.feitos}/${pb.total}`, montar: 'Montar' };
@@ -1518,16 +1558,31 @@ function renderOficina() {
       for (const i of [...g.itens].sort((a, b) => (rc[a.chave] ? 1 : 0) - (rc[b.chave] ? 1 : 0))) h += linhaOficina('cortar', i.chave, !!rc[i.chave], i.nome, i.recorte ? 'recortar' : '', i.medida, `× ${i.qty}`);
     }
   } else if (ofVista === 'comprar') {
-    for (const i of [...l.comprar].sort((a, b) => (rb[a.chave] ? 1 : 0) - (rb[b.chave] ? 1 : 0))) h += linhaOficina('comprar', i.chave, !!rb[i.chave], i.texto, '', i.qtd, '');
+    h += '<p class="of-legenda">Toca numa linha: <b>já tenho</b> em casa, depois <b>comprado</b>, e outra vez para voltar atrás.</p>';
+    for (const i of [...compras].sort((a, b) => (a.estado ? 1 : 0) - (b.estado ? 1 : 0))) h += linhaCompra(i);
+    h += blocoExtras(compras);
   } else {
     h = e.resposta ? `<div class="bloco of-montar">${esc(e.resposta)}</div>`
       : `<div class="bloco of-vazio"><p>Ainda não guardaste a resposta do Claude com os passos de montagem.</p><button data-acao-of="guardar-resposta">${icon('colar')}Guardar a resposta</button></div>`;
   }
   $('#of-corpo').innerHTML = h;
+  if (textoEscrito && $('#of-extra-txt')) { $('#of-extra-txt').value = textoEscrito; if (tinhaFoco) $('#of-extra-txt').focus(); }
 }
 $('#of-seg').addEventListener('click', (ev) => { const b = ev.target.closest('[data-v]'); if (b) { ofVista = b.dataset.v; renderOficina(); } });
 $('#of-corpo').addEventListener('click', (ev) => {
+  const tirar = ev.target.closest('[data-extra-tirar]');
+  if (tirar) { setHist(H.tirarExtra(hist, oficinaId, tirar.dataset.extraTirar)); return; }
+  const juntar = ev.target.closest('[data-extra-juntar]');
+  if (juntar) { setHist(H.juntarExtra(hist, oficinaId, juntar.dataset.extraJuntar)); return; }
+  const acao = ev.target.closest('[data-acao-of]')?.dataset.acaoOf;
+  if (acao === 'extra-add') {
+    const t = $('#of-extra-txt').value;
+    if (t.trim()) { $('#of-extra-txt').value = ''; setHist(H.juntarExtra(hist, oficinaId, t)); }
+    return;
+  }
+  if (acao === 'partilhar') { partilharCompras(); return; }
   const b = ev.target.closest('.of-linha');
+  if (b && b.dataset.tipo === 'compra') { setHist(H.ciclarCompra(hist, oficinaId, b.dataset.chave)); return; }
   if (b) {
     const e = hist.find((x) => x.id === oficinaId);
     const feito = !(e.oficina?.[b.dataset.tipo] || {})[b.dataset.chave];
@@ -1576,7 +1631,7 @@ $('#continuar').addEventListener('click', (ev) => {
 
 $('#hist-exportar').addEventListener('click', () => {
   const dia = new Date().toISOString().slice(0, 10);
-  download(JSON.stringify(H.exportar({ perfil, historico: hist }), null, 1), `garagem-copia-${dia}.json`, 'application/json');
+  download(JSON.stringify(H.exportar({ perfil, historico: hist, medidas }), null, 1), `garagem-copia-${dia}.json`, 'application/json');
   toast('Cópia guardada na pasta Transferências.');
 });
 $('#hist-importar').addEventListener('change', async (ev) => {
@@ -1588,6 +1643,7 @@ $('#hist-importar').addEventListener('change', async (ev) => {
     if (!confirm('Recuperar esta cópia? O equipamento passa a ser o da cópia, e os pedidos da cópia juntam-se aos que já estão aqui.')) return;
     if (imp.perfil) { aplicarPerfil(imp.perfil); savePerfil(); }
     setHist(H.juntar(hist, imp.historico));
+    if (imp.medidas.length) { medidas = F.juntarMedidas(medidas, imp.medidas); F.guardarMedidas(LS, medidas); }
     toast('Cópia recuperada.');
   } catch (e) { toast(e.message || String(e), true); }
 });
@@ -1678,6 +1734,199 @@ $('#sync-desligar').addEventListener('click', () => {
 });
 mostrarSync();
 agendarSync(500);
+
+// ================= Ferramentas =================
+const FERR = [
+  { h: 'cortes', i: 'cortes', nome: 'Cortes de madeira', d: 'Quantas tábuas comprar e como cortar.' },
+  { h: 'temporizador', i: 'relogio', nome: 'Temporizador', d: 'Secagem da cola, do verniz e da tinta.' },
+  { h: 'medidas', i: 'regua', nome: 'Caderno de medidas', d: 'As medidas dos sítios, sempre à mão.' },
+  { h: 'tinta', i: 'pincel', nome: 'Tinta, verniz e cola', d: 'Quanto comprar para a peça.' },
+  { h: 'madeiras', i: 'tronco', nome: 'Guia de madeiras', d: 'Para que serve cada madeira.' },
+];
+$('#ferr-menu').innerHTML = FERR.map((f) => `<a class="tile" href="#${f.h}"><span class="ci">${icon(f.i)}</span><span><b>${f.nome}</b><span class="d">${f.d}</span></span></a>`).join('');
+
+// ---------- temporizador ----------
+let temps = F.carregarTemp(LS);
+const avisados = new Set(); // temporizadores que já tocaram nesta sessão
+let audioCtx = null;
+function prepararSom() { try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch { /* sem som */ } }
+function apito() {
+  try {
+    [0, 0.45, 0.9].forEach((d) => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.frequency.value = 880; g.gain.value = 0.25;
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(audioCtx.currentTime + d); o.stop(audioCtx.currentTime + d + 0.25);
+    });
+  } catch { /* sem som */ }
+  try { navigator.vibrate?.([300, 150, 300, 150, 300]); } catch { /* sem vibração */ }
+}
+function gravarTemps(nova) { temps = nova; F.guardarTemp(LS, temps); verTempo(); }
+function renderTemp() {
+  $('#temp-pre').innerHTML = F.TEMPOS.map((t) => `<button type="button" class="tile tile-temp" data-min="${t.min}" data-nome="${esc(t.nome)}"><span class="ci">${icon('relogio')}</span><span><b>${esc(t.nome)}</b><span class="d">${F.duracao(t.min)}</span></span></button>`).join('');
+  verTempo();
+}
+/** Atualiza os números a cada segundo e toca quando um temporizador acaba. */
+function verTempo() {
+  const agora = Date.now();
+  for (const t of F.terminados(temps, agora)) {
+    if (avisados.has(t.id)) continue;
+    avisados.add(t.id);
+    if (agora - t.fim < 15000) { apito(); toast(`${t.nome}: acabou o tempo.`); }
+  }
+  if (tabAtual !== 'temporizador') return;
+  $('#temp-bloco').hidden = !temps.length;
+  $('#temp-lista').innerHTML = [...temps].sort((a, b) => a.fim - b.fim).map((t) => {
+    const acabou = t.fim <= agora;
+    return `<div class="temp-linha${acabou ? ' acabou' : ''}"><span class="temp-nome">${esc(t.nome)}</span><span class="temp-tempo">${acabou ? 'Acabou' : F.restante(t.fim - agora)}</span><button class="sec" data-parar="${esc(t.id)}">${acabou ? 'Feito' : 'Parar'}</button></div>`;
+  }).join('');
+}
+setInterval(() => { if (temps.length) verTempo(); }, 1000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') verTempo(); });
+$('#tab-temporizador').addEventListener('click', (ev) => {
+  const p = ev.target.closest('[data-min]');
+  if (p) {
+    prepararSom();
+    gravarTemps(F.iniciarTemp(temps, p.dataset.nome, Number(p.dataset.min)));
+    toast(`Começou: ${p.dataset.nome} (${F.duracao(Number(p.dataset.min))}).`);
+    $('#temp-bloco').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    return;
+  }
+  const s = ev.target.closest('[data-parar]');
+  if (s) gravarTemps(F.pararTemp(temps, s.dataset.parar));
+});
+$('#temp-iniciar').addEventListener('click', () => {
+  const min = (Number($('#temp-h').value) || 0) * 60 + (Number($('#temp-m').value) || 0);
+  if (!(min > 0)) { toast('Escolhe as horas ou os minutos.', true); return; }
+  prepararSom();
+  gravarTemps(F.iniciarTemp(temps, $('#temp-n').value, min));
+  $('#temp-n').value = '';
+  toast(`Começou: ${F.duracao(min)}.`);
+});
+
+// ---------- caderno de medidas ----------
+let medidas = F.carregarMedidas(LS);
+let medidaEditar = null;
+function gravarMedidas(nova) {
+  medidas = nova;
+  if (!F.guardarMedidas(LS, medidas)) toast('Não consegui guardar neste aparelho.', true);
+}
+function renderMedidas() {
+  $('#med-bloco').hidden = !medidas.length;
+  $('#med-lista').innerHTML = F.juntarMedidas(medidas, []).map((m) => `<div class="med-item">
+    <div class="med-txt"><b>${esc(m.nome)}</b><span class="med-v">${esc(m.medida)}</span>${m.nota ? `<small>${esc(m.nota)}</small>` : ''}</div>
+    <div class="med-bt"><button class="sec" data-med-editar="${esc(m.id)}" aria-label="Corrigir ${esc(m.nome)}">${icon('editar')}</button><button class="sec" data-med-apagar="${esc(m.id)}" aria-label="Apagar ${esc(m.nome)}">${icon('apagar')}</button></div></div>`).join('');
+  const a = medidaEditar && medidas.find((m) => m.id === medidaEditar);
+  $('#med-cancelar').hidden = !a;
+  $('#med-guardar').lastChild.textContent = a ? 'Guardar alteração' : 'Guardar medida';
+}
+function limparMedida() {
+  medidaEditar = null;
+  ['#med-nome', '#med-valor', '#med-nota'].forEach((q) => ($(q).value = ''));
+  $('#med-erro').classList.remove('on');
+}
+$('#med-guardar').addEventListener('click', () => {
+  const dados = { id: medidaEditar, nome: $('#med-nome').value, medida: $('#med-valor').value, nota: $('#med-nota').value };
+  if (!dados.nome.trim() || !dados.medida.trim()) {
+    $('#med-erro').textContent = 'Escreve o que é e quanto mede.';
+    $('#med-erro').classList.add('on');
+    return;
+  }
+  gravarMedidas(F.guardarMedida(medidas, dados));
+  limparMedida();
+  renderMedidas();
+  toast('Medida guardada.');
+});
+$('#med-cancelar').addEventListener('click', () => { limparMedida(); renderMedidas(); });
+$('#med-lista').addEventListener('click', (ev) => {
+  const ed = ev.target.closest('[data-med-editar]');
+  if (ed) {
+    const m = medidas.find((x) => x.id === ed.dataset.medEditar);
+    if (!m) return;
+    medidaEditar = m.id;
+    $('#med-nome').value = m.nome; $('#med-valor').value = m.medida; $('#med-nota').value = m.nota || '';
+    renderMedidas();
+    $('#med-nome').focus();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+  const ap = ev.target.closest('[data-med-apagar]');
+  if (ap) {
+    const m = medidas.find((x) => x.id === ap.dataset.medApagar);
+    if (!m || !confirm(`Apagar "${m.nome}"?`)) return;
+    if (medidaEditar === m.id) limparMedida();
+    gravarMedidas(F.apagarMedida(medidas, m.id));
+    renderMedidas();
+  }
+});
+/** No Novo pedido: tocar numa medida do caderno põe-na no texto. */
+function renderPedidoMedidas() {
+  $('#pedido-medidas').hidden = !medidas.length;
+  $('#pedido-medidas-chips').innerHTML = F.juntarMedidas(medidas, []).map((m) => `<button type="button" data-med-id="${esc(m.id)}">${esc(m.nome)}</button>`).join('');
+}
+$('#pedido-medidas-chips').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-med-id]');
+  const m = b && medidas.find((x) => x.id === b.dataset.medId);
+  if (!m) return;
+  const ta = $('#pedido');
+  ta.value = (ta.value.trim() ? ta.value.replace(/\s*$/, '\n') : '') + F.linhaMedida(m) + '\n';
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
+  ta.focus();
+  toast(`Juntei: ${m.nome}.`);
+});
+
+// ---------- tinta, verniz e cola ----------
+const tinta = { prod: F.PRODUTOS[0], lados: 1, demaos: F.PRODUTOS[0].demaos, rend: F.PRODUTOS[0].rend };
+function renderTinta() {
+  const p = tinta.prod, cola = p.id === 'cola';
+  $('#tinta-prod').innerHTML = F.PRODUTOS.map((x) => `<button type="button" data-prod="${x.id}" class="${x.id === p.id ? 'on' : ''}">${x.nome}</button>`).join('');
+  $('#tinta-demaos').innerHTML = [1, 2, 3, 4].map((n) => `<button type="button" data-demaos="${n}" class="${n === tinta.demaos ? 'on' : ''}">${n}</button>`).join('');
+  $$('#tinta-lados button').forEach((b) => b.classList.toggle('on', Number(b.dataset.lados) === tinta.lados));
+  for (const q of ['#tinta-lados-l', '#tinta-lados', '#tinta-demaos-l', '#tinta-demaos']) $(q).hidden = cola;
+  $('[for="tinta-c"]').textContent = cola ? 'Comprimento da junta (cm)' : 'Comprimento (cm)';
+  $('[for="tinta-l"]').textContent = cola ? 'Largura colada (cm)' : 'Largura (cm)';
+  $('[for="tinta-f"]').textContent = cola ? 'Quantas juntas iguais' : 'Quantas peças iguais';
+  $('#tinta-rend-l').textContent = cola ? 'Metros quadrados por kg' : `Metros quadrados por ${p.un === 'L' ? 'litro' : 'kg'}, por demão`;
+  $('#tinta-rend').value = String(tinta.rend).replace('.', ',');
+  contaTinta();
+}
+function contaTinta() {
+  const p = tinta.prod, c = val($('#tinta-c')), l = val($('#tinta-l')), n = Math.max(1, Math.floor(val($('#tinta-f')) || 1));
+  const area = F.areaM2(c, l, n * (p.id === 'cola' ? 1 : tinta.lados));
+  const q = F.quantidade(p, area, p.id === 'cola' ? 1 : tinta.demaos, tinta.rend);
+  const el = $('#tinta-res');
+  el.hidden = !q;
+  if (!q) return;
+  const e = q.embal;
+  el.innerHTML = `<div>Precisas de cerca de <b>${F.textoQuantidade(q.precisa, p.un)}</b></div>
+    <p>Compra <b>${e.n} ${e.n === 1 ? 'embalagem' : 'embalagens'} de ${F.textoQuantidade(e.tam, p.un)}</b>.</p>
+    <p class="muted">${fmt(area, 2)} m²${p.id === 'cola' ? '' : ` · ${tinta.demaos} ${tinta.demaos === 1 ? 'demão' : 'demãos'}`} · já com 10% a mais para o que se perde.</p>`;
+}
+$('#tab-tinta').addEventListener('click', (ev) => {
+  const pr = ev.target.closest('[data-prod]');
+  if (pr) { tinta.prod = F.PRODUTOS.find((x) => x.id === pr.dataset.prod); tinta.demaos = tinta.prod.demaos; tinta.rend = tinta.prod.rend; renderTinta(); return; }
+  const d = ev.target.closest('[data-demaos]');
+  if (d) { tinta.demaos = Number(d.dataset.demaos); renderTinta(); return; }
+  const la = ev.target.closest('[data-lados]');
+  if (la) { tinta.lados = Number(la.dataset.lados); renderTinta(); }
+});
+['#tinta-c', '#tinta-l', '#tinta-f'].forEach((q) => $(q).addEventListener('input', contaTinta));
+$('#tinta-rend').addEventListener('input', () => { const v = val($('#tinta-rend')); tinta.rend = v > 0 ? v : tinta.prod.rend; contaTinta(); });
+
+// ---------- guia de madeiras ----------
+let filtroMadeira = 'todas';
+function renderMadeiras() {
+  $('#mad-filtro').innerHTML = F.FILTROS_MADEIRA.map((f) => `<button type="button" data-filtro="${f.id}" class="${f.id === filtroMadeira ? 'on' : ''}">${f.nome}</button>`).join('');
+  $('#mad-lista').innerHTML = F.madeirasDe(filtroMadeira).map((m) => `<div class="bloco">
+    <h3>${esc(m.nome)}<span class="mad-tag">${m.grupo === 'placa' ? 'Placa' : 'Madeira ' + F.DUREZAS[m.dureza].toLowerCase()}</span></h3>
+    <p>${esc(m.serve)}</p>
+    <p class="muted"><b>Atenção:</b> ${esc(m.cuidados)}</p>
+    ${m.exterior ? '<p><span class="mad-tag">Aguenta o exterior</span></p>' : ''}</div>`).join('');
+}
+$('#mad-filtro').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-filtro]');
+  if (b) { filtroMadeira = b.dataset.filtro; renderMadeiras(); }
+});
 
 // ================= Arranque =================
 drawBed();

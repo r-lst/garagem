@@ -17,6 +17,8 @@ App web estática para marcenaria e impressão 3D, com um Cloudflare Worker para
   - `garagem_historico`: histórico de pedidos e projetos
   - `garagem_prefs`: aspeto deste aparelho (`animacoes` true|false; `tema` reservado). Fora da cópia de segurança e da cópia online
   - `garagem_sync`: chave da cópia online, `perfilAtualizado`, `conhecidos` (sha de cada ficheiro online), hora da última sincronização
+  - `garagem_medidas`: caderno de medidas (`[{id, nome, medida, nota, atualizado}]`). Vai na cópia de segurança em ficheiro; **não** vai na cópia online (ainda)
+  - `garagem_temporizadores`: temporizadores a contar (`[{id, nome, fim, min}]`, `fim` em ms). Só deste aparelho
 - Não commitar `node_modules/` nem `dist/` (já estão no `.gitignore`).
 
 ## Aspeto (Blueprint)
@@ -36,7 +38,8 @@ App web estática para marcenaria e impressão 3D, com um Cloudflare Worker para
 | `shapes.js` | Peça 3D a partir de JSON do Claude (formas `add`/`sub`) e geradores simples (caixa, tampa, tubo, suporte em L, placa) |
 | `project.js` | Projeto de madeira: lê o JSON, cria a geometria, deteta peças soltas, calcula a lista de cortes |
 | `cuts.js` | Cálculo de cortes de tábuas (1D), por grupos |
-| `oficina.js` | Modo oficina (sem DOM): listas Cortar e Comprar de um projeto, com chaves estáveis para riscar |
+| `oficina.js` | Modo oficina (sem DOM): listas Cortar e Comprar de um projeto, com chaves estáveis para riscar; lista de compras (com extras) e o texto para partilhar |
+| `ferramentas.js` | Ferramentas pequenas (sem DOM): temporizador, caderno de medidas, tinta/verniz/cola, guia de madeiras |
 | `folha.js` | Folha de cortes para imprimir (sem DOM, devolve HTML): comprar, cortar, como cortar cada tábua |
 | `prompts.js` | Texto dos pedidos que o pai cola no Claude |
 | `historico.js` | Histórico (sem DOM): registar pedido, ligar projeto, apagar, juntar duas cópias, ficheiro de cópia |
@@ -62,18 +65,27 @@ A página só fala com o **Worker da Garagem** (`WORKER_URL`), e só para os uso
 - Sem rede, ou com o Worker em baixo: tudo continua a funcionar e a guardar no aparelho; o Histórico mostra o erro em português.
 
 ## Histórico
-- Entrada: `{id, criado, atualizado, modo, estado:"pedido"|"projeto"|"resolvida", texto, pedido, nome, projeto, area, resposta, oficina}`. Entram os modos `madeira`, `reparacao`, `plano`, `outro` (não os de Peça 3D). `resolvida` e `area` só nas reparações; `resposta` nas reparações e nos projetos de madeira; `oficina: {cortar:{chave:true}, comprar:{chave:true}}` = o que foi riscado no modo oficina.
+- Entrada: `{id, criado, atualizado, modo, estado:"pedido"|"projeto"|"resolvida", texto, pedido, nome, projeto, area, resposta, oficina}`. Entram os modos `madeira`, `reparacao`, `plano`, `outro` (não os de Peça 3D). `resolvida` e `area` só nas reparações; `resposta` nas reparações e nos projetos de madeira; `oficina: {cortar:{chave:true}, comprar:{chave:true}, tenho:{chave:true}, extras:{chave:texto}}` = o que foi riscado no modo oficina (`comprar` = comprado, `tenho` = já tinha, `extras` = linhas juntadas à lista de compras).
 - "pedido" ao chegar ao passo 3; passa a "projeto" ao carregar em **Desenhar** (liga ao último pedido de madeira sem projeto). O exemplo não entra.
 - Apagar deixa `{id, atualizado, apagado:true}`, para a sincronização não ressuscitar o que foi apagado. Juntar: por `id`, ganha o `atualizado` mais recente.
 - Mudar o formato: atualizar `historico.js`, `test-historico.mjs` e manter a leitura das entradas antigas.
 
 ## Telemóvel (até 700 px de largura)
-- O menu de cima dá lugar a uma barra em baixo: Início, Projetos (= Histórico), Pedir, Cortes. Sem "Mais": Ver projeto, Peça 3D e Equipamento só no computador. Decide-se pela largura, não pelo aparelho.
+- O menu de cima dá lugar a uma barra em baixo: Início, Projetos (= Histórico), Novo pedido, Ferramentas. Sem "Mais": Ver projeto, Peça 3D e Equipamento só no computador. Decide-se pela largura, não pelo aparelho.
 - Início mostra "Continuar": o projeto mais recente com cortes por fazer e até 2 reparações por resolver. A apresentação e a mesa 3D só no computador.
-- **Modo oficina** (`#oficina=<id>`, também no computador): Cortar / Comprar / Montar. Tocar numa linha risca-a (fica em `oficina` na entrada e vai na cópia online); o riscado desce para o fim do grupo. Montar mostra a `resposta` guardada. Ecrã sempre ligado (Wake Lock) enquanto está aberto.
+- **Modo oficina** (`#oficina=<id>`, também no computador): Cortar / Comprar / Montar. Tocar numa linha de Cortar risca-a (fica em `oficina` na entrada e vai na cópia online); o riscado desce para o fim do grupo.
+- **Comprar** é a lista de compras do projeto: cada toque passa a linha por *por comprar → já tenho → comprado → por comprar* (`oficina.tenho` e `oficina.comprar`; as entradas antigas, só com `comprar`, leem-se como comprado). Por baixo, **Juntar à lista** (botões de lixa, cola, verniz… e campo "Outra coisa" → `oficina.extras`, linhas com chave `x|…`) e **Partilhar a lista** (partilha do telemóvel, ou copia; leva só o que ainda falta). Montar mostra a `resposta` guardada. Ecrã sempre ligado (Wake Lock) enquanto está aberto.
 - As chaves das linhas (`oficina.js`) não dependem do comprimento da tábua: mudar a tábua em Cortes não perde o que foi riscado. Não as mudar sem migrar.
 - Sem modo offline: há sempre internet na garagem (decisão do Leston). Mantém-se o ficheiro único.
 - `.so-pc` esconde coisas no telemóvel (ex.: "Ver em 3D" e a cópia de segurança no Histórico, o Ctrl+V e o "Ir para Ver projeto" no Pedir); `.so-tel` mostra só no telemóvel. As regras do menu de cima são `#tabs`, não `nav` (a barra também é um `nav`).
+
+## Ferramentas (separador **Ferramentas**)
+Menu de cartões (`#ferramentas`); cada ferramenta tem a sua página com "voltar" (`#cortes`, `#temporizador`, `#medidas`, `#tinta`, `#madeiras`). Tudo **offline**, sem Worker. A lógica está em `ferramentas.js` (testada em `test-ferramentas.mjs`).
+- **Cortes de madeira**: o que já havia.
+- **Temporizador**: tempos habituais (cola, verniz, tinta…) e "Outro tempo". Guarda a hora a que acaba (`fim`), por isso aguenta a página em segundo plano; ao voltar mostra "Acabou". Toca (3 apitos) e vibra só com a página aberta: sem service worker nem notificações, de propósito (não pedir permissões ao pai). Os tempos são os habituais, a embalagem manda.
+- **Caderno de medidas**: nome + medida (texto livre, ex. "810 × 2040 mm") + nota. No Novo pedido, passo 2, os botões "Juntar uma medida do caderno" põem a linha no texto.
+- **Tinta, verniz e cola**: área (cm) × peças × lados × demãos ÷ rendimento, com 10% de margem, e sugere a embalagem. O rendimento é editável. A cola conta uma só camada.
+- **Guia de madeiras**: lista fixa em `MADEIRAS` (maciças e placas), com filtros. Texto curto: serve para quê e o que ter em conta.
 
 ## Reparações
 - Tipo `reparacao` no Pedir ao Claude (e cartão no Início). Passo 2: área opcional (`AREAS_REPARACAO`) e "O que se passa?". Fotos: com chave ligada, o passo 2 tem **Juntar foto** (até 3, reduzidas na página, só em memória) e o passo 3 **Descrever as fotos**; a descrição aparece numa caixa que se pode corrigir e entra no pedido (`O QUE SE VÊ NAS FOTOS`, `descrever.js`, `buildPrompt({fotos})`), e o Histórico guarda o pedido já com ela. Sem chave ou sem rede, o pedido sai sem fotos e o passo 3 lembra de as juntar na conversa do Claude.
@@ -118,10 +130,10 @@ A página só fala com o **Worker da Garagem** (`WORKER_URL`), e só para os uso
 ## Como testar
 ```
 npm ci
-npm test         # lógica: geometria, cortes, projetos, pedidos, histórico, Worker (GitHub simulado), folha de cortes
+npm test         # lógica: geometria, cortes, projetos, pedidos, histórico, Worker (GitHub simulado), folha de cortes, oficina, ferramentas
 npm run build    # gera dist/index.html
 ```
-Abrir `dist/index.html` no browser (duplo clique) e experimentar: Início; Pedir ao Claude (3 passos); Ver projeto → "Ver um exemplo"; Peça 3D → criar suporte em L, furar, cortar, guardar; criar uma placa de 280 × 40 (deve rodar para a diagonal e avisar) e uma de 400 × 300 (deve dizer que excede); Cortes; Ver projeto → "Imprimir folha de cortes" (pré-visualização de impressão: A4, preto e branco, 2 páginas no exemplo); Histórico (fazer um pedido de madeira, desenhar, "Ver em 3D", apagar, guardar/recuperar cópia); a 375 px: barra em baixo, Início → Continuar → Abrir na oficina, riscar um corte, Montar → Guardar a resposta.
+Abrir `dist/index.html` no browser (duplo clique) e experimentar: Início; Pedir ao Claude (3 passos); Ver projeto → "Ver um exemplo"; Peça 3D → criar suporte em L, furar, cortar, guardar; criar uma placa de 280 × 40 (deve rodar para a diagonal e avisar) e uma de 400 × 300 (deve dizer que excede); Cortes; Ver projeto → "Imprimir folha de cortes" (pré-visualização de impressão: A4, preto e branco, 2 páginas no exemplo); Histórico (fazer um pedido de madeira, desenhar, "Ver em 3D", apagar, guardar/recuperar cópia); a 375 px: barra em baixo, Início → Continuar → Abrir na oficina, riscar um corte, Comprar (três toques numa linha, juntar Lixa, Partilhar), Montar → Guardar a resposta; Ferramentas → Temporizador (começar um de 5 min), Caderno de medidas (guardar uma e juntá-la num Novo pedido), Tinta, Guia de madeiras.
 Os testes automáticos não cobrem a interface. Depois de mexer em UI, abrir a página e verificar à mão.
 
 ## Ramos e publicação

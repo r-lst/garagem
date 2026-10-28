@@ -18,7 +18,7 @@
     <a href="#inicio" data-tab="inicio" data-i="inicio"><span>Início</span></a>
     <a href="#pedir" data-tab="pedir" data-i="pedir"><span>Novo pedido</span></a>
     <a href="#historico" data-tab="historico" data-i="historico"><span>Projetos</span></a>
-    <a href="#cortes" data-tab="cortes" data-i="ferramentas"><span>Ferramentas</span></a>
+    <a href="#ferramentas" data-tab="ferramentas" data-i="ferramentas"><span>Ferramentas</span></a>
     <a href="#perfil" data-tab="perfil" data-i="equip"><span>Equipamento</span></a>
   </nav>
 </header>
@@ -77,6 +77,7 @@
     <label for="pedido" class="q" id="pedido-l">O que queres?</label>
     <textarea id="pedido" rows="7"></textarea>
     <div class="dicas" id="pedido-dicas"></div>
+    <div id="pedido-medidas" hidden><p class="q q-peq">Juntar uma medida do caderno</p><div class="chips" id="pedido-medidas-chips"></div></div>
     <div class="row"><button class="sec" id="limpar-pedido">Limpar o que escrevi</button></div>
     <div id="fotos-bloco" hidden>
       <p class="q q-peq">Fotos <span class="muted">(opcional, até 3)</span></p>
@@ -312,11 +313,111 @@
   </div>
 </section>
 
+<!-- ===== FERRAMENTAS ===== -->
+<section id="tab-ferramentas" class="tab">
+  <div class="cabeca"><h2 class="titulo-tab"><span class="ci cab" data-i="ferramentas"></span>Ferramentas</h2><p class="muted">Pequenas ajudas para a oficina. Funcionam sem internet.</p></div>
+  <div class="tiles" id="ferr-menu"></div>
+</section>
+
+<!-- ===== TEMPORIZADOR ===== -->
+<section id="tab-temporizador" class="tab">
+  <div class="cortes-wrap">
+    <div class="cabeca">
+      <a class="voltar-link" href="#ferramentas" data-i="voltar">Ferramentas</a>
+      <h2 class="titulo-tab"><span class="ci cab" data-i="relogio"></span>Temporizador</h2>
+    </div>
+    <div class="bloco" id="temp-bloco" hidden>
+      <h3>A contar</h3>
+      <div id="temp-lista"></div>
+      <p class="muted">Deixa esta página aberta: o aviso só toca com a página aberta. Se fechares, ao voltar vês quanto falta.</p>
+    </div>
+    <div class="bloco">
+      <p class="muted">Para a secagem da cola, do verniz e da tinta. Toca no que vais fazer. Os tempos são os habituais: confirma na embalagem.</p>
+      <div class="tiles" id="temp-pre"></div>
+      <details class="sub" id="temp-outro">
+        <summary>Outro tempo</summary>
+        <div class="grid3">
+          <div><label for="temp-h">Horas</label><input type="number" id="temp-h" min="0" max="336" value="0" inputmode="numeric"></div>
+          <div><label for="temp-m">Minutos</label><input type="number" id="temp-m" min="0" max="59" value="0" inputmode="numeric"></div>
+          <div><label for="temp-n">Nome</label><input type="text" id="temp-n" placeholder="Ex.: cola da gaveta" autocomplete="off"></div>
+        </div>
+        <div class="row"><button id="temp-iniciar" data-i="relogio">Começar</button></div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ===== CADERNO DE MEDIDAS ===== -->
+<section id="tab-medidas" class="tab">
+  <div class="cortes-wrap">
+    <div class="bloco">
+      <a class="voltar-link" href="#ferramentas" data-i="voltar">Ferramentas</a>
+      <h2 class="titulo-tab"><span class="ci cab" data-i="regua"></span>Caderno de medidas</h2>
+      <p class="muted">Guarda as medidas dos sítios (um vão, uma parede, uma prateleira). Ao fazer um novo pedido, tocas na medida e ela entra no texto.</p>
+      <label for="med-nome">Que medida é?</label>
+      <input type="text" id="med-nome" placeholder="Ex.: Vão da porta da cozinha" autocomplete="off">
+      <label for="med-valor">Quanto mede?</label>
+      <input type="text" id="med-valor" placeholder="Ex.: 810 × 2040 mm" autocomplete="off">
+      <label for="med-nota">Nota <span class="muted">(opcional)</span></label>
+      <input type="text" id="med-nota" placeholder="Ex.: medido com a porta aberta" autocomplete="off">
+      <div class="row"><button id="med-guardar" class="grande" data-i="guardar">Guardar medida</button><button id="med-cancelar" class="sec" hidden>Cancelar</button></div>
+      <div id="med-erro" class="erro"></div>
+    </div>
+    <div class="bloco" id="med-bloco" hidden>
+      <h3>As minhas medidas</h3>
+      <div id="med-lista"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== TINTA, VERNIZ E COLA ===== -->
+<section id="tab-tinta" class="tab">
+  <div class="cortes-wrap">
+    <div class="bloco">
+      <a class="voltar-link" href="#ferramentas" data-i="voltar">Ferramentas</a>
+      <h2 class="titulo-tab"><span class="ci cab" data-i="pincel"></span>Tinta, verniz e cola</h2>
+      <p class="muted">Diz o tamanho da peça e vês quanto comprar.</p>
+      <p class="q q-peq">O que vais usar?</p>
+      <div class="chips" id="tinta-prod"></div>
+      <div class="grid3">
+        <div><label for="tinta-c">Comprimento (cm)</label><input type="number" id="tinta-c" min="0" step="any" inputmode="decimal"></div>
+        <div><label for="tinta-l">Largura (cm)</label><input type="number" id="tinta-l" min="0" step="any" inputmode="decimal"></div>
+        <div><label for="tinta-f">Quantas peças iguais</label><input type="number" id="tinta-f" min="1" value="1" inputmode="numeric"></div>
+      </div>
+      <p class="q q-peq" id="tinta-lados-l">Quantos lados levam?</p>
+      <div class="chips" id="tinta-lados"><button type="button" data-lados="1" class="on">Um lado</button><button type="button" data-lados="2">Os dois lados</button></div>
+      <p class="q q-peq" id="tinta-demaos-l">Quantas demãos?</p>
+      <div class="chips" id="tinta-demaos"></div>
+      <div id="tinta-res" class="resultado" hidden></div>
+      <details class="sub">
+        <summary>Mudar o rendimento da lata</summary>
+        <label for="tinta-rend" id="tinta-rend-l">Metros quadrados por litro, por demão</label>
+        <input type="number" id="tinta-rend" min="0" step="any" inputmode="decimal">
+        <p class="muted">Vem escrito na lata. Se escreveres aqui o da tua, a conta fica certa.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ===== GUIA DE MADEIRAS ===== -->
+<section id="tab-madeiras" class="tab">
+  <div class="cortes-wrap">
+    <div class="bloco">
+      <a class="voltar-link" href="#ferramentas" data-i="voltar">Ferramentas</a>
+      <h2 class="titulo-tab"><span class="ci cab" data-i="tronco"></span>Guia de madeiras</h2>
+      <p class="muted">Para que serve cada uma e o que ter em conta.</p>
+      <div class="chips" id="mad-filtro"></div>
+    </div>
+    <div id="mad-lista" class="mad-lista"></div>
+  </div>
+</section>
+
 <!-- ===== CORTES ===== -->
 <section id="tab-cortes" class="tab">
   <div class="cortes-wrap">
     <div class="bloco" id="cortes-form">
-      <h2 class="titulo-tab"><span class="ci cab" data-i="cortes"></span>Ferramentas: cortes de madeira</h2>
+      <a class="voltar-link" href="#ferramentas" data-i="voltar">Ferramentas</a>
+      <h2 class="titulo-tab"><span class="ci cab" data-i="cortes"></span>Cortes de madeira</h2>
       <p class="muted">Diz que peças precisas e o comprimento das tábuas. Recebes quantas tábuas comprar e como cortar cada uma.</p>
       <div class="grid3">
         <div><label for="t-comp">Comprimento da tábua</label><input type="number" id="t-comp" value="2400" step="any" min="1"></div>
@@ -343,7 +444,7 @@
     <div id="hist-lista" class="hist-lista"></div>
     <div class="bloco hist-copia so-pc">
       <h3>Cópia de segurança</h3>
-      <p class="muted">Guarda num ficheiro o histórico e o equipamento. Serve para não perder nada se mudares de computador ou limpares o browser.</p>
+      <p class="muted">Guarda num ficheiro o histórico, o equipamento e as medidas do caderno. Serve para não perder nada se mudares de computador ou limpares o browser.</p>
       <div class="row"><button class="sec" id="hist-exportar" data-i="guardar">Guardar uma cópia</button><label class="btn sec ficheiro-btn" data-i="abrirficheiro"><span>Recuperar uma cópia</span><input type="file" id="hist-importar" accept=".json,application/json"></label></div>
     </div>
   </div>
@@ -413,7 +514,7 @@
   <a href="#inicio" data-tab="inicio" data-i="inicio"><span>Início</span></a>
   <a href="#historico" data-tab="historico" data-i="historico"><span>Projetos</span></a>
   <a href="#pedir" data-tab="pedir" data-i="pedir"><span>Novo pedido</span></a>
-  <a href="#cortes" data-tab="cortes" data-i="ferramentas"><span>Ferramentas</span></a>
+  <a href="#ferramentas" data-tab="ferramentas" data-i="ferramentas"><span>Ferramentas</span></a>
 </nav>
 <div id="toast" class="toast"></div>
 <script>/*JS*/</script>

@@ -44,6 +44,19 @@ export function listasOficina(spec, { board = 2400, kerf = 3, trim = 0 } = {}) {
   return { nome: proj.nome, madeira: proj.madeira || '', medidas: [s.x, s.y, s.z], cortar, comprar };
 }
 
+/** A lista de compras do projeto (linhas calculadas + extras que o pai juntou), cada uma com o seu estado. */
+export function listaCompras(l, oficina = {}, estadoDe) {
+  const extras = Object.entries(oficina.extras || {}).map(([chave, texto]) => ({ chave, texto, qtd: '', extra: true }));
+  return [...l.comprar, ...extras].map((i) => ({ ...i, estado: estadoDe(oficina, i.chave) }));
+}
+
+/** Texto para mandar a alguém ou levar para a loja: só o que falta comprar. */
+export function textoCompras(nome, itens) {
+  const falta = itens.filter((i) => !i.estado);
+  if (!falta.length) return '';
+  return [`Compras para ${nome}:`, ...falta.map((i) => `- ${i.texto}${i.qtd ? `: ${i.qtd}` : ''}`)].join('\n');
+}
+
 /** Quantas linhas de uma lista estão riscadas: {feitos, total}. `riscado` = {chave: true}. */
 export function progresso(itens, riscado = {}) {
   return { feitos: itens.filter((i) => riscado[i.chave]).length, total: itens.length };

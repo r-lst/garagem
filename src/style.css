@@ -139,6 +139,13 @@ button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
 :is(.cartao, .tile, .hist-item, .cont-cartao, .of-linha, .titulo-tab):is(:hover, :focus-visible) .i-historico { transform: rotate(-90deg); }
 :is(.cartao, .tile, .hist-item, .cont-cartao, .of-linha, .titulo-tab):is(:hover, :focus-visible) .i-equip { transform: rotate(-20deg) scale(1.1); }
 :is(.cartao, .tile, .hist-item, .cont-cartao, .of-linha, .titulo-tab):is(:hover, :focus-visible) .i-oficina { transform: translateY(-4px); }
+:is(.cartao, .tile, .hist-item, .cont-cartao, .of-linha, .titulo-tab):is(:hover, :focus-visible) .i-relogio { transform: rotate(-14deg) scale(1.1); }
+:is(.cartao, .tile, .hist-item, .cont-cartao, .of-linha, .titulo-tab):is(:hover, :focus-visible) .i-regua { transform: translateX(4px) rotate(-6deg); }
+:is(.cartao, .tile, .hist-item, .cont-cartao, .of-linha, .titulo-tab):is(:hover, :focus-visible) .i-pincel { transform: translateY(-3px) rotate(-14deg); }
+:is(.cartao, .tile, .hist-item, .cont-cartao, .of-linha, .titulo-tab):is(:hover, :focus-visible) .i-tronco { transform: translateY(-3px) scale(1.12); }
+:is(.cartao, .tile, .hist-item, .cont-cartao, .of-linha, .titulo-tab):is(:hover, :focus-visible) .i-partilhar { transform: scale(1.18); }
+:is(.cartao, .tile, .hist-item, .cont-cartao, .of-linha, .titulo-tab):is(:hover, :focus-visible) .i-juntar { transform: rotate(90deg) scale(1.15); }
+:is(.cartao, .tile, .hist-item, .cont-cartao, .of-linha, .titulo-tab):is(:hover, :focus-visible) .i-editar { transform: translateY(-3px) rotate(-12deg); }
 
 .ir .ic { transition: transform .2s ease-out; }
 .cartao:hover .ir .ic, .cartao:focus-visible .ir .ic { transform: translateX(5px); }
@@ -352,6 +359,41 @@ body.busy::after { content: "A processar…"; position: fixed; inset: 0; backgro
 .of-linha.feito .of-nome, .of-linha.feito .of-med { color: var(--muted); text-decoration: line-through; }
 .of-montar { white-space: pre-wrap; font-size: 1.15rem; line-height: 1.6; overflow-wrap: anywhere; }
 .of-vazio { font-size: 1.05rem; }
+
+/* ---------- ferramentas ---------- */
+a.tile { text-decoration: none; }
+.tile .d { display: block; }
+.tile-temp { padding-top: 18px; justify-content: flex-start; align-items: center; }
+.temp-linha { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.temp-linha:last-child { border-bottom: 0; }
+.temp-nome { flex: 1 1 12ch; font-size: 1.15rem; font-weight: 700; overflow-wrap: anywhere; }
+.temp-tempo { font-family: var(--slab); font-size: 1.7rem; font-weight: 700; color: var(--accent-t); }
+.temp-linha.acabou .temp-tempo { color: var(--ok); }
+.temp-linha.acabou { background: var(--ok-bg); border-radius: 12px; padding-left: 12px; padding-right: 12px; }
+.med-item { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.med-item:last-child { border-bottom: 0; }
+.med-txt { flex: 1 1 16ch; min-width: 0; overflow-wrap: anywhere; }
+.med-txt b { display: block; font-size: 1.15rem; }
+.med-txt .med-v { font-family: var(--slab); font-size: 1.35rem; font-weight: 700; color: var(--accent-t); }
+.med-txt small { display: block; color: var(--muted); font-size: .95rem; }
+.med-bt { display: flex; gap: 8px; }
+.resultado { margin-top: 18px; padding: 16px 18px; border-radius: var(--r); background: var(--accent-soft); border: 2px solid var(--line-2); font-size: 1.1rem; }
+.resultado b { font-family: var(--slab); font-size: 1.6rem; color: var(--accent-t); }
+.resultado p { margin: 6px 0 0; }
+.mad-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; margin-top: 14px; }
+.mad-lista .bloco h3 { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 6px; }
+.mad-tag { font-family: var(--sans); font-size: .95rem; font-weight: 700; padding: 2px 12px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-t); white-space: nowrap; }
+.mad-lista p { margin: 6px 0 0; }
+.of-linha.tenho { background: var(--paper-2); border-style: dashed; }
+.of-linha.tenho .of-cx { background: var(--card); border-color: var(--line-2); color: var(--accent-t); }
+.of-linha.tenho .of-nome { color: var(--ink-2); }
+.of-extra { display: flex; align-items: stretch; gap: 8px; margin: 0 0 8px; }
+.of-extra .of-linha { margin: 0; flex: 1; }
+.of-extra .sec { flex: none; width: 56px; padding: 0; }
+.of-legenda { color: var(--ink-2); margin: 0 0 10px; }
+.of-add { margin-top: 18px; }
+.of-add .row { margin-top: 8px; }
+.of-add input { flex: 1 1 14ch; margin: 0; }
 
 /* ---------- telemóvel: barra em baixo, Continuar ---------- */
 .barra, .continuar { display: none; }

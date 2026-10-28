@@ -33,6 +33,13 @@ const P = {
   lua: '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/>',
   oficina: '<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-5h6v5M8.5 11.5h7"/>',
   certo:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  relogio: '<circle cx="12" cy="13" r="8"/><path d="M12 8.5V13l3 2M9.5 2.5h5M12 2.5V5"/>',
+  regua: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3v18M12.5 8h3.5M12.5 12h3.5M12.5 16h2"/>',
+  pincel: '<path d="M14 4l6 6-8 8-6-6z"/><path d="M6 12l-2.5 6.5a1.5 1.5 0 0 0 2 2L12 18"/><path d="M17 7l-2 2"/>',
+  tronco: '<ellipse cx="12" cy="7" rx="8" ry="3.5"/><path d="M4 7v10c0 1.9 3.6 3.5 8 3.5s8-1.6 8-3.5V7"/><ellipse cx="12" cy="7" rx="3.5" ry="1.4"/>',
+  partilhar: '<circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6"/>',
+  juntar: '<path d="M12 5v14M5 12h14"/>',
+  editar: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
 };
 export function icon(name, cls = '') {
   return `<svg class="ic i-${name} ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
