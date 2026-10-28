@@ -25,10 +25,16 @@ const P = {
   imprimir: '<path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/>',
   historico: '<path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3 4v4h4"/><path d="M12 7.5V12l3 2"/>',
   apagar: '<path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  reparar: '<g transform="rotate(45 12 12)"><path d="M8 2h2.5v4h3V2H16v7.5l-2.5 2V19a1.5 1.5 0 0 1-3 0v-7.5l-2.5-2z"/><path d="M12 15.5v.01"/></g>',
+  mais: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
+  melhorpos: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/>',
+  sol: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M18.7 5.3l-1.8 1.8M7.1 16.9l-1.8 1.8"/>',
+  lua: '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/>',
+  oficina: '<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-5h6v5M8.5 11.5h7"/>',
   certo:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
 };
 export function icon(name, cls = '') {
-  return `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
+  return `<svg class="ic i-${name} ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
 }
 export function fillIcons(root = document) {
   root.querySelectorAll('[data-i]').forEach((el) => { el.innerHTML = icon(el.dataset.i) + el.innerHTML; el.removeAttribute('data-i'); });
