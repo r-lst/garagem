@@ -1,7 +1,8 @@
 // Histórico de pedidos e projetos. Lógica pura (sem DOM): guardar, ligar o projeto ao pedido, juntar cópias.
 // Cada entrada: {id, criado, atualizado, modo, estado:'pedido'|'projeto'|'resolvida', texto, pedido, nome, projeto, area, resposta}
 // 'resolvida' só nas reparações; 'resposta' nas reparações e nos projetos de madeira;
-// oficina: {cortar:{chave:true}, comprar:{chave:true}} = o que foi riscado no modo oficina.
+// oficina: {cortar:{chave:true}, comprar:{chave:true}, tenho:{chave:true}, extras:{chave:texto}} = o que foi riscado no modo oficina
+// (comprar = comprado, tenho = já tinha em casa, extras = linhas que o pai juntou à lista de compras).
 // Apagar deixa só {id, atualizado, apagado:true}, para a sincronização não ressuscitar o que foi apagado.
 
 export const CHAVE = 'garagem_historico';
@@ -93,6 +94,51 @@ export function marcarOficina(lista, id, tipo, chave, feito = true, agora = Date
   });
 }
 
+/** Lista de compras: estado de uma linha: '' (por comprar), 'tenho' (já tenho em casa) ou 'comprado'. */
+export function estadoCompra(oficina, chave) {
+  if (oficina?.comprar?.[chave]) return 'comprado';
+  if (oficina?.tenho?.[chave]) return 'tenho';
+  return '';
+}
+
+/** Cada toque passa ao estado seguinte: por comprar → já tenho → comprado → por comprar. */
+export function ciclarCompra(lista, id, chave, agora = Date.now()) {
+  return lista.map((e) => {
+    if (e.id !== id || e.apagado) return e;
+    const of = { cortar: {}, comprar: {}, tenho: {}, ...(e.oficina || {}) };
+    const seguinte = { '': 'tenho', tenho: 'comprado', comprado: '' }[estadoCompra(of, chave)];
+    const comprar = { ...of.comprar }, tenho = { ...of.tenho };
+    delete comprar[chave]; delete tenho[chave];
+    if (seguinte === 'tenho') tenho[chave] = true;
+    if (seguinte === 'comprado') comprar[chave] = true;
+    return { ...e, oficina: { ...of, comprar, tenho }, atualizado: agora };
+  });
+}
+
+/** Junta uma linha à lista de compras do projeto (lixa, cola…). Se já lá estiver com o mesmo nome, não repete. */
+export function juntarExtra(lista, id, texto, agora = Date.now()) {
+  const t = String(texto || '').trim();
+  if (!t) return lista;
+  return lista.map((e) => {
+    if (e.id !== id || e.apagado) return e;
+    const of = e.oficina || {};
+    const extras = { ...(of.extras || {}) };
+    if (Object.values(extras).some((x) => x.toLowerCase() === t.toLowerCase())) return e;
+    extras['x|' + novoId()] = t;
+    return { ...e, oficina: { cortar: {}, comprar: {}, ...of, extras }, atualizado: agora };
+  });
+}
+
+/** Tira uma linha extra (e o que estava marcado nela). */
+export function tirarExtra(lista, id, chave, agora = Date.now()) {
+  return lista.map((e) => {
+    if (e.id !== id || e.apagado || !e.oficina?.extras?.[chave]) return e;
+    const of = e.oficina;
+    const sem = (o) => { const c = { ...(o || {}) }; delete c[chave]; return c; };
+    return { ...e, oficina: { ...of, extras: sem(of.extras), comprar: sem(of.comprar), tenho: sem(of.tenho) }, atualizado: agora };
+  });
+}
+
 export function apagar(lista, id, agora = Date.now()) {
   return lista.map((e) => (e.id === id ? { id, atualizado: agora, apagado: true } : e));
 }
@@ -110,8 +156,8 @@ export function juntar(a, b) {
 export const iguais = (a, b) => JSON.stringify(juntar(a, [])) === JSON.stringify(juntar(b, []));
 
 // ---------- cópia num ficheiro ----------
-export function exportar({ perfil, historico }, agora = Date.now()) {
-  return { app: 'garagem', versao: 1, guardado: new Date(agora).toISOString(), perfil, historico };
+export function exportar({ perfil, historico, medidas = [] }, agora = Date.now()) {
+  return { app: 'garagem', versao: 1, guardado: new Date(agora).toISOString(), perfil, historico, medidas };
 }
 
 /** Lê o ficheiro de cópia. Erros em português, para mostrar ao pai. */
@@ -120,5 +166,9 @@ export function importar(texto) {
   try { o = JSON.parse(texto); } catch { throw new Error('Este ficheiro não é uma cópia da Garagem.'); }
   if (!o || o.app !== 'garagem') throw new Error('Este ficheiro não é uma cópia da Garagem.');
   if (!Array.isArray(o.historico)) throw new Error('A cópia não tem histórico.');
-  return { perfil: o.perfil && typeof o.perfil === 'object' ? o.perfil : null, historico: o.historico.filter((e) => e && typeof e.id === 'string') };
+  return {
+    perfil: o.perfil && typeof o.perfil === 'object' ? o.perfil : null,
+    historico: o.historico.filter((e) => e && typeof e.id === 'string'),
+    medidas: Array.isArray(o.medidas) ? o.medidas.filter((m) => m && typeof m.id === 'string' && typeof m.nome === 'string') : [],
+  };
 }
