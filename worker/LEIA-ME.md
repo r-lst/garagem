@@ -44,8 +44,8 @@ Se o link do pai vazar: gerar outra `PAI_KEY`, `wrangler secret put PAI_KEY`, ma
 
 ## Segredos (já criados, todos do tipo Secret)
 
-`GITHUB_TOKEN`, `GITHUB_REPO`, `PAI_KEY`, `ADMIN_KEY` (e `GEMINI_API_KEY`, para mais tarde).
-Opcionais: `GITHUB_RAMO` (por omissão `main`), `ORIGENS` (por omissão `https://r-lst.github.io`; para testar o `dist/index.html` aberto com duplo clique, juntar `,null`).
+`GITHUB_TOKEN`, `GITHUB_REPO`, `PAI_KEY`, `ADMIN_KEY` e `GEMINI_API_KEY` (a chave do Google AI Studio, para descrever fotos).
+Opcionais: `GEMINI_MODELOS` (lista separada por vírgulas, do preferido para o de reserva; por omissão `gemini-3.8-flash,gemini-3.6-flash,gemini-3.1-flash-lite`), `GITHUB_RAMO` (por omissão `main`), `ORIGENS` (por omissão `https://r-lst.github.io`; para testar o `dist/index.html` aberto com duplo clique, juntar `,null`).
 
 O token expira a **21/10/2027**. Quando expirar, a cópia online mostra um erro e a página continua a funcionar com o que tem no aparelho.
 
@@ -80,9 +80,13 @@ Deve responder `{"ficheiros":[],...}` enquanto o repositório estiver vazio. Sem
 
 - Só aceita pedidos vindos das origens permitidas (CORS). Isto trava outros sites num browser; contra scripts quem protege é a chave.
 - Sem uma chave certa responde 401 e não toca no GitHub.
-- Só grava nos caminhos `perfil.json`, `historico/<id>.json` e `projetos/<id>.json`.
+- Só grava nos caminhos `perfil.json`, `historico/<id>.json` e `projetos/<id>.json`; as fotos só entram por `/descrever`, em `fotos/<id>/<n>.jpg`, e têm de ser JPEG (máx. 3, ~1,3 MB cada).
 - Até 30 pedidos por minuto por endereço IP (`[[ratelimits]]` no `wrangler.toml`).
 - O token só tem acesso ao `garagem-dados`.
+
+## Fotos (`POST /descrever`)
+
+O Gemini descreve as fotos de uma reparação; o Claude é que aconselha. Se a chave do Gemini (`GEMINI_API_KEY`) não existir ou a quota acabar, a página mostra o erro e o pedido continua a poder ser copiado sem a descrição. Para mudar de modelo sem mexer no código: `npx wrangler secret put GEMINI_MODELOS` (por exemplo `gemini-3.8-flash,gemini-3.1-flash-lite`).
 
 ## Testes
 

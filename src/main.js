@@ -14,6 +14,7 @@ import { icon, fillIcons } from './icons.js';
 import * as H from './historico.js';
 import { sincronizar, lerConfig, gravarConfig, chaveDoLink } from './sync.js';
 import { WORKER_URL } from './config.js';
+import { descreverFotos, MAX_FOTOS } from './descrever.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -310,6 +311,8 @@ $('#modos').addEventListener('click', (e) => {
   const rep = modo === 'reparacao';
   $('#areas').hidden = !rep;
   $('#pedido-l').textContent = rep ? 'O que se passa?' : 'O que queres?';
+  $('#fotos-bloco').hidden = !(rep && syncLigado());
+  mostrarFotos();
   $('#pedido-dicas').innerHTML = rep ? DICAS.reparacao : DICAS.normal;
   avisoPeca();
   setStep(2);
@@ -317,7 +320,7 @@ $('#modos').addEventListener('click', (e) => {
 });
 $('#voltar1').addEventListener('click', () => setStep(1));
 $('#voltar2').addEventListener('click', () => setStep(2));
-$('#novo-pedido').addEventListener('click', () => { $('#pedido').value = ''; pedidoAtualId = null; area = ''; $$('#areas-chips button').forEach((x) => x.classList.remove('on')); setStep(1); });
+$('#novo-pedido').addEventListener('click', () => { $('#pedido').value = ''; pedidoAtualId = null; area = ''; fotos = []; descricao = ''; mostrarFotos(); $$('#areas-chips button').forEach((x) => x.classList.remove('on')); setStep(1); });
 $('#cartao-reparar').addEventListener('click', (e) => {
   e.preventDefault();
   goto('pedir');
@@ -328,7 +331,13 @@ $('#criar').addEventListener('click', () => {
   if (!texto.trim() && !confirm('Não escreveste nada. Queres criar o pedido na mesma?')) return;
   const rep = modo === 'reparacao';
   const areaPedido = rep ? area : '';
-  $('#saida').value = buildPrompt({ modo, texto, perfil, peca: modo === 'alterar' ? partInfo() : null, area: areaPedido });
+  $('#saida').value = pedidoTexto();
+  const comFotos = rep && fotos.length > 0 && syncLigado();
+  $('#descricao-bloco').hidden = !comFotos;
+  $('#descricao-caixa').hidden = !descricao;
+  $('#descricao').value = descricao;
+  $('#descrever-estado').textContent = '';
+  $('#descrever-erro').className = 'erro';
   $('#colar-t').textContent = rep ? 'Colar, juntar as fotos e enviar' : 'Colar e enviar';
   $('#colar-foto').hidden = !rep;
   $('#foto-como').hidden = !rep;
@@ -349,6 +358,70 @@ $('#criar').addEventListener('click', () => {
   }
   setStep(3);
 });
+// ---- fotos da reparação: o Gemini descreve, o Claude aconselha
+let fotos = []; // JPEG em base64, sem o prefixo "data:"; só em memória
+let descricao = '';
+function pedidoTexto() {
+  const rep = modo === 'reparacao';
+  return buildPrompt({ modo, texto: $('#pedido').value, perfil, peca: modo === 'alterar' ? partInfo() : null, area: rep ? area : '', fotos: rep ? descricao : '' });
+}
+function mostrarFotos() {
+  $('#fotos-mini').innerHTML = fotos.map((f, i) => `<span class="foto-mini"><img src="data:image/jpeg;base64,${f}" alt="Foto ${i + 1}"><button type="button" class="sec" data-tirar="${i}" aria-label="Tirar a foto ${i + 1}">✕</button></span>`).join('');
+  $('#fotos-in').disabled = fotos.length >= MAX_FOTOS;
+}
+/** Reduz a foto para ~1280 px em JPEG: menos dados no telemóvel e o Worker não tem de a mexer. */
+async function reduzirFoto(file) {
+  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const k = Math.min(1, 1280 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  bmp.close?.();
+  let q = 0.75, b64;
+  do { b64 = c.toDataURL('image/jpeg', q).split(',')[1]; q -= 0.1; } while (b64.length > 1_500_000 && q > 0.3);
+  return b64;
+}
+$('#fotos-in').addEventListener('change', async (ev) => {
+  const ficheiros = [...ev.target.files].slice(0, MAX_FOTOS - fotos.length);
+  ev.target.value = '';
+  for (const f of ficheiros) {
+    try { fotos.push(await reduzirFoto(f)); } catch { toast('Não consegui abrir uma das fotos.', true); }
+  }
+  descricao = '';
+  mostrarFotos();
+});
+$('#fotos-mini').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-tirar]');
+  if (!b) return;
+  fotos.splice(Number(b.dataset.tirar), 1);
+  descricao = '';
+  mostrarFotos();
+});
+/** Refaz o pedido com a descrição atual e atualiza o que está guardado no Histórico. */
+function refazerPedido() {
+  $('#saida').value = pedidoTexto();
+  if (pedidoAtualId && H.MODOS_HIST.includes(modo)) setHist(H.registarPedido(hist, { id: pedidoAtualId, modo, texto: $('#pedido').value, pedido: $('#saida').value, area }).lista);
+}
+$('#descrever-fotos').addEventListener('click', async () => {
+  const b = $('#descrever-fotos'), est = $('#descrever-estado'), erro = $('#descrever-erro');
+  b.disabled = true;
+  est.textContent = 'A descrever… (pode demorar uns segundos)';
+  erro.className = 'erro';
+  try {
+    const r = await descreverFotos(WORKER_URL, syncCfg.codigo, { id: pedidoAtualId, texto: $('#pedido').value, area, fotos });
+    descricao = r.descricao;
+    $('#descricao').value = descricao;
+    $('#descricao-caixa').hidden = false;
+    refazerPedido();
+    est.textContent = 'Pronto: a descrição já está no pedido.';
+  } catch (e) {
+    est.textContent = '';
+    erro.textContent = e.message || String(e);
+    erro.className = 'erro on';
+  }
+  b.disabled = false;
+});
+$('#descricao').addEventListener('input', () => { descricao = $('#descricao').value; refazerPedido(); });
 $('#copiar').addEventListener('click', async () => {
   const txt = $('#saida').value;
   let done = false;

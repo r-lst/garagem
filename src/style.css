@@ -497,3 +497,9 @@ html[data-anim="off"] :is(.cartao, .tile, .hist-item, .cont-cartao, .of-linha, .
   .grid3 > div:last-child { grid-column: 1 / -1; }
   #abrir-claude { padding-left: 12px; padding-right: 12px; white-space: nowrap; }
 }
+
+.fotos-mini { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; }
+.foto-mini { position: relative; display: inline-block; }
+.foto-mini img { display: block; width: 96px; height: 96px; object-fit: cover; border-radius: 12px; border: 2px solid var(--line-2); }
+.foto-mini button { position: absolute; top: -12px; right: -12px; width: 48px; min-height: 48px; height: 48px; padding: 0; border-radius: 50%; }
+#descricao-bloco textarea { font-size: 1rem; }

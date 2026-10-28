@@ -3,7 +3,7 @@
 App web estática para marcenaria e impressão 3D, com um Cloudflare Worker para o que precisa de rede (ver **Rede**). Publicada em https://r-lst.github.io/garagem/
 
 ## Para quem é
-- **Utilizador final:** o pai do Leston, 70 e tal anos, usa o Claude gratuito (conversa no browser, sem API), no computador e no telemóvel. Precisa de letra grande, poucos campos por ecrã, nada técnico. Ecrãs novos têm de funcionar a 375 px de largura. Tem uma Creality K1 (PLA, volume 220×220×250 mm) e trabalha madeira na garagem do prédio.
+- **Utilizador final:** o pai do Leston, 70 e tal anos, usa o Claude (já tem a versão paga, Pro; conversa no browser, sem API), no computador e no telemóvel. Precisa de letra grande, poucos campos por ecrã, nada técnico. Ecrãs novos têm de funcionar a 375 px de largura. Tem uma Creality K1 (PLA, volume 220×220×250 mm) e trabalha madeira na garagem do prédio.
 - **Quem mantém:** o Leston (administrador de sistemas; não programa de raiz). Explicar alterações em linguagem simples e dizer sempre o que mudou no ecrã.
 
 ## Regras do projeto
@@ -40,6 +40,7 @@ App web estática para marcenaria e impressão 3D, com um Cloudflare Worker para
 | `folha.js` | Folha de cortes para imprimir (sem DOM, devolve HTML): comprar, cortar, como cortar cada tábua |
 | `prompts.js` | Texto dos pedidos que o pai cola no Claude |
 | `historico.js` | Histórico (sem DOM): registar pedido, ligar projeto, apagar, juntar duas cópias, ficheiro de cópia |
+| `descrever.js` | Descrição das fotos (sem DOM): pede ao Worker e traduz os erros para português |
 | `sync.js` | Cópia online: lê do Worker o que mudou, junta com o local, grava o que é mais recente cá; chave do link `#k=` |
 | `config.js` | `WORKER_URL` (vazio = sem cópia online) |
 
@@ -51,9 +52,11 @@ A página só fala com o **Worker da Garagem** (`WORKER_URL`), e só para os uso
 | Uso | Rota | O que sai do browser | Quando |
 |---|---|---|---|
 | Cópia online | `GET /lista`, `POST /ler`, `POST /gravar` | histórico (pedidos, textos, projetos) e equipamento | só com uma chave ligada no aparelho (link `#k=` ou Equipamento) |
+| Descrever fotos | `POST /descrever` | texto do pedido, zona e 1 a 3 fotos (JPEG ~1280 px) → Worker → Google (Gemini) | só ao carregar em **Descrever as fotos**, numa reparação, com chave ligada |
 
 - Worker `api-github-garagem-dados`; guarda no repositório **privado** `r-lst/garagem-dados`: `perfil.json`, `historico/<id>.json`, `projetos/<id>.json` (mais tarde `fotos/<id-projeto>/<n>.jpg`). Detalhes em `worker/LEIA-ME.md`.
 - Segredos do Worker: `GITHUB_TOKEN`, `GITHUB_REPO`, `PAI_KEY`, `ADMIN_KEY`, `GEMINI_API_KEY`. A página só conhece a chave do aparelho. `PAI_KEY` lê e grava; `ADMIN_KEY` também apaga ficheiros.
+- `/descrever`: o Gemini **só descreve** (marca, modelo, estado visível); o conselho é do Claude. O Worker tenta `GEMINI_MODELOS` por ordem (por omissão `gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.1-flash-lite`; secret opcional para mudar) e passa ao seguinte em 429, erro 5xx, modelo inexistente (404/400) ou resposta vazia. Os nomes vêm da documentação da Google (aistudio.google.com/docs/models). Usa `generateContent` (a Google diz que continua totalmente suportado; a documentação nova usa `/interactions`). O Worker não descodifica as fotos (CPU do plano grátis): passa o base64 ao Gemini e ao GitHub (`POST /git/blobs`, um só commit), em `fotos/<id-do-pedido>/<n>.jpg`. A sincronização ignora `fotos/`. No plano grátis do Gemini a Google pode usar o que recebe para melhorar os produtos: a página avisa numa linha (sem pessoas nem documentos). Quota grátis (AI Studio): 3.8 Flash 5/min e 20/dia; 3.1 Flash Lite 15/min e 500/dia.
 - Plano grátis: 50 pedidos ao GitHub por pedido ao Worker. Por isso a gravação é um só commit (5 pedidos) e a leitura vai em lotes de 40. Não trocar por um pedido por ficheiro.
 - Conflitos: por ficheiro, ganha o `atualizado` mais recente. Um aparelho que nunca guardou equipamento (`perfilAtualizado` 0) só recebe o equipamento, nunca envia os valores de origem.
 - Sem rede, ou com o Worker em baixo: tudo continua a funcionar e a guardar no aparelho; o Histórico mostra o erro em português.
@@ -73,13 +76,13 @@ A página só fala com o **Worker da Garagem** (`WORKER_URL`), e só para os uso
 - `.so-pc` esconde coisas no telemóvel (ex.: "Ver em 3D" e a cópia de segurança no Histórico, o Ctrl+V e o "Ir para Ver projeto" no Pedir); `.so-tel` mostra só no telemóvel. As regras do menu de cima são `#tabs`, não `nav` (a barra também é um `nav`).
 
 ## Reparações
-- Tipo `reparacao` no Pedir ao Claude (e cartão no Início). Passo 2: área opcional (`AREAS_REPARACAO`) e "O que se passa?". Passo 3: lembra de juntar fotos na conversa do Claude. A página não vê nem envia as fotos.
+- Tipo `reparacao` no Pedir ao Claude (e cartão no Início). Passo 2: área opcional (`AREAS_REPARACAO`) e "O que se passa?". Fotos: com chave ligada, o passo 2 tem **Juntar foto** (até 3, reduzidas na página, só em memória) e o passo 3 **Descrever as fotos**; a descrição aparece numa caixa que se pode corrigir e entra no pedido (`O QUE SE VÊ NAS FOTOS`, `descrever.js`, `buildPrompt({fotos})`), e o Histórico guarda o pedido já com ela. Sem chave ou sem rede, o pedido sai sem fotos e o passo 3 lembra de as juntar na conversa do Claude.
 - Pedido em `prompts.js` (`REGRAS_REPARACAO`, `FORMATO_REPARACAO`): texto, sem JSON. Até 3 causas, dificuldade, ferramentas e material, passos, quando chamar um técnico.
 - Segurança, no pedido e só no pedido: eletricidade = uma frase a lembrar o disjuntor desligado no quadro; gás = não serve para isso, é para um técnico de gás. **Sem avisos na página** e sem tom de quem fala para uma criança (decisão do Leston).
 - No Histórico: "Guardar a resposta" (o pai cola o texto do Claude), "Marcar como resolvida" / "Voltar a abrir".
 
 ## Contrato entre os pedidos e os leitores (crítico)
-`prompts.js` ensina o Claude gratuito a produzir JSON, e `shapes.js` / `project.js` leem-no. Têm de mudar juntos.
+`prompts.js` ensina o Claude a produzir JSON, e `shapes.js` / `project.js` leem-no. Têm de mudar juntos.
 
 - **Peça 3D:** `{"nome", "operacoes":[{"op":"add|sub","forma":"caixa|cilindro|cone|esfera", ...}], "base":"carregada" (opcional)}`
 - **Projeto de madeira:** `{"nome","madeira","pecas":[{"tipo":"tabua|varao|perfil|parafuso|cavilha|dobradica", ...}]}`

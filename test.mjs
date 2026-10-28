@@ -80,6 +80,9 @@ ok(/lista de cortes/i.test(buildPrompt({ modo: 'madeira', texto: 'x' })), 'promp
 const prep = buildPrompt({ modo: 'reparacao', texto: 'a torneira pinga', area: 'Canalização' });
 ok(/fotos/.test(prep) && /disjuntor/.test(prep) && /técnico de gás/.test(prep) && /É sobre: Canalização/.test(prep) && /Passos para a causa mais provável/.test(prep), 'prompt reparação: fotos, quadro, gás, área, formato');
 ok(!/JSON/.test(prep) && !/O QUE QUERO/.test(prep), 'prompt reparação: sem JSON');
+const pf = buildPrompt({ modo: 'reparacao', texto: 'a torneira pinga', fotos: 'Torneira cromada, marca ACME 35' });
+ok(/O QUE SE VÊ NAS FOTOS/.test(pf) && /ACME 35/.test(pf) && pf.indexOf('A AVARIA') < pf.indexOf('O QUE SE VÊ NAS FOTOS'), 'prompt reparação: leva a descrição das fotos depois da avaria');
+ok(!/NAS FOTOS/.test(prep) && !/NAS FOTOS/.test(buildPrompt({ modo: 'madeira', texto: 'x', fotos: 'abc' })), 'sem fotos (ou fora das reparações) não há secção de fotos');
 ok(!/Impressora/.test(buildPrompt({ modo: 'reparacao', texto: 'x', perfil: { impressora: 'Creality K1', ferramentas: 'berbequim' } })) && /berbequim/.test(buildPrompt({ modo: 'reparacao', texto: 'x', perfil: { impressora: 'Creality K1', ferramentas: 'berbequim' } })), 'prompt reparação: leva as ferramentas, não a impressora');
 ok(/posição para imprimir/.test(buildPrompt({ modo: 'peca3d', texto: 'x' })) && /onde e em que direção/.test(buildPrompt({ modo: 'peca3d', texto: 'x' })), 'prompt peça 3D: pergunta a força e diz a posição');
 

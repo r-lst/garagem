@@ -111,13 +111,14 @@ Ainda não tens as medidas da peça. Pergunta-me o comprimento, a largura e a al
 - O JSON da entrega final só leva as ALTERAÇÕES (add/sub) a aplicar sobre esta peça, nunca a peça inteira. Põe "base":"carregada" no topo do JSON.`;
 }
 
-export function buildPrompt({ modo, texto, perfil = {}, peca = null, area = '' }) {
+export function buildPrompt({ modo, texto, perfil = {}, peca = null, area = '', fotos = '' }) {
   const partes = [modo === 'reparacao' ? REGRAS_REPARACAO : REGRAS];
   const pt = perfilTexto(perfil, { impressora: modo !== 'reparacao' });
   if (pt) partes.push(pt);
   if (modo === 'alterar') partes.push(pecaTexto(peca));
   if (modo === 'reparacao') partes.push(`A AVARIA${area ? `\nÉ sobre: ${area}.` : ''}\n${(texto || '').trim() || '(ainda não descrevi; começa por me perguntar o que se passa)'}`);
   else partes.push(`O QUE QUERO\n${(texto || '').trim() || '(ainda não sei bem; ajuda-me a descobrir, começando por perguntar o essencial)'}`);
+  if (modo === 'reparacao' && fotos.trim()) partes.push(`O QUE SE VÊ NAS FOTOS\n(descrição automática, feita por outro programa; se algo não bater certo com o que te disser, pergunta-me)\n${fotos.trim()}`);
   if (modo === 'peca3d' || modo === 'alterar') partes.push(FORMATO_JSON);
   else if (modo === 'madeira') partes.push(FORMATO_MADEIRA);
   else if (modo === 'plano') partes.push(FORMATO_PLANO);
