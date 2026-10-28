@@ -401,14 +401,20 @@ a.tile { text-decoration: none; }
 .cont-cartao h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 4px; font-size: 1.2rem; overflow-wrap: anywhere; }
 .cont-cartao p { margin: 0 0 12px; color: var(--ink-2); }
 .cont-cartao .btn, .cont-botoes .btn { width: 100%; }
+.cont-botoes { margin-bottom: 18px; }
 .cont-botoes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 @media (max-width: 700px) {
   #tabs { display: none; }
   .topo { padding: 8px 16px; }
   main { padding: 16px 16px calc(96px + env(safe-area-inset-bottom)); }
-  .barra { display: grid; grid-template-columns: repeat(4, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--topo); box-shadow: 0 -2px 0 var(--accent), 0 -6px 20px -8px rgba(0,0,0,.5); padding-bottom: env(safe-area-inset-bottom); }
+  .barra { display: grid; grid-template-columns: 1fr 1.1fr .9fr 1.4fr; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--topo); box-shadow: 0 -2px 0 var(--accent), 0 -6px 20px -8px rgba(0,0,0,.5); padding-bottom: env(safe-area-inset-bottom); }
   .barra a, .barra button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 66px; padding: 6px 2px; color: #D5E2EF; text-decoration: none; font: inherit; font-size: .95rem; font-weight: 700; background: none; border: 0; border-radius: 0; box-shadow: none; }
   .barra .ic { width: 26px; height: 26px; }
+  .barra a span { white-space: nowrap; }
+  .tile .nc { display: none; }
+  /* botões lado a lado ficam do mesmo tamanho; nos cartões do histórico, um por linha */
+  main .row > button, main .row > .btn { flex: 1 1 150px; }
+  .hist-item .row > button, .hist-item .row > .btn { flex: 1 1 100%; }
   .barra a.on { color: var(--on-accent); background: var(--accent-b); }
   .barra button:active, .barra a:active { transform: none; }
   .toast { bottom: calc(86px + env(safe-area-inset-bottom)); }
