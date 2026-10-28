@@ -5,6 +5,7 @@ const P = {
   projeto: '<rect x="2.5" y="6" width="19" height="2.5" rx=".5"/><path d="M5 8.5V19M19 8.5V19M5 13.5h14"/>',
   peca: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/>',
   cortes: '<path d="M3 16.5L16.5 3 21 7.5 7.5 21z"/><path d="M7 12.5l2 2M10 9.5l2 2M13 6.5l2 2"/>',
+  ferramentas: '<rect x="2.5" y="8" width="19" height="8" rx="1"/><path d="M6.5 8v3M10.5 8v4.5M14.5 8v3M18.5 8v4.5"/>',
   equip: '<path d="M14.7 6.3a4 4 0 0 0-5.3 5.3L3 18l3 3 6.4-6.4a4 4 0 0 0 5.3-5.3l-2.6 2.6-2.4-.6-.6-2.4z"/>',
   novo: '<path d="M11 4l7 4v8l-7 4-7-4V8z"/><path d="M11 12l7-4M11 12v8M11 12L4 8"/><path d="M20 2v5M17.5 4.5h5"/>',
   alterar: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',

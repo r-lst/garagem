@@ -121,6 +121,9 @@ ok(!mp.mudou && near(mp.depois.base, 5000, 5), 'tábua deitada: já está na mel
 mp = G.melhorPosicao(bloco(300, 30, 10), K1);
 ok(mp && !G.excessos(G.bbox(mp.geo).size, K1).length, `300 de comprido: escolhe uma posição que cabe (${tam(mp?.geo)})`);
 ok(G.melhorPosicao(bloco(400, 300, 20), K1) === null, 'grande demais: sem posição');
+const noAr = buildSpec({ operacoes: [{ op: 'add', forma: 'caixa', tamanho: [100, 50, 10], centro: [0, 0, 25] }] });
+mp = G.melhorPosicao(noAr, K1);
+ok(!mp.mudou && near(G.bbox(noAr).min.z, 20) && near(G.bbox(mp.geo).min.z, 0), 'peça no ar (depois de cortar): a melhor posição assenta-a na mesa');
 
 console.log(fails ? `\n${fails} FALHAS` : '\nTudo OK');
 process.exit(fails ? 1 : 0);

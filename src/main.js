@@ -162,7 +162,7 @@ function showTab(name) {
   if (!TABS.includes(name)) name = 'inicio';
   if (name === 'oficina' && !hist.some((e) => e.id === oficinaId && e.projeto && !e.apagado)) name = 'historico';
   tabAtual = name;
-  const marca = name === 'oficina' ? 'historico' : name;
+  const marca = { oficina: 'historico', projeto: 'historico', peca: 'pedir' }[name] || name;
   $$('#tabs a, #barra a').forEach((b) => b.classList.toggle('on', b.dataset.tab === marca));
   $$('.tab').forEach((t) => t.classList.toggle('on', t.id === 'tab-' + name));
   requestAnimationFrame(() => {
@@ -265,7 +265,7 @@ function makeViewer(el, { labels = false } = {}) {
   return v;
 }
 
-// ================= Pedir ao Claude =================
+// ================= Novo pedido =================
 const MODO_INFO = {
   peca3d: { i: 'novo', d: 'Suportes, caixas, adaptadores, peças de substituição.' },
   alterar: { i: 'alterar', d: 'Mudar uma peça que já tens em STL: furos, abas, encaixes.' },
@@ -276,7 +276,7 @@ const MODO_INFO = {
 };
 let modo = null;
 let area = '';
-const DESTINO = { projeto: ['#projeto', 'Ir para Ver projeto'], peca: ['#peca', 'Ir para Peça 3D'], historico: ['#historico', 'Ir para o Histórico'] };
+const DESTINO = { projeto: ['#projeto', 'Ver o projeto'], peca: ['#peca', 'Ir para Peça 3D'], historico: ['#historico', 'Ir para Projetos'] };
 const DICAS = {
   normal: '<b>Ajuda o Claude se disseres:</b> o que é e para que serve · medidas aproximadas · onde vai ficar · o material que tens. Se não souberes, não faz mal: ele pergunta.',
   reparacao: '<b>Ajuda o Claude se disseres:</b> o que é · o que acontece e desde quando · o que já experimentaste.',
@@ -288,25 +288,71 @@ $('#areas-chips').addEventListener('click', (e) => {
   area = area === b.dataset.area ? '' : b.dataset.area;
   $$('#areas-chips button').forEach((x) => x.classList.toggle('on', x.dataset.area === area));
 });
-$('#modos').innerHTML = Object.entries(MODOS).map(([k, m], n, todos) => `<button class="tile" data-modo="${k}"><span class="nc">${String(n + 1).padStart(2, '0')} / ${String(todos.length).padStart(2, '0')}</span><span class="ci">${icon(MODO_INFO[k].i)}</span><span><b>${m.nome}</b><span class="d">${MODO_INFO[k].d}</span></span></button>`).join('');
+// Peça nova e Alterar peça juntam-se num só cartão "Peça 3D", que abre as escolhas do 3D.
+const TILES = [
+  ['grupo3d', 'peca', 'Peça 3D', 'Fazer uma peça nova para imprimir, ou alterar uma que já tens em STL.'],
+  ...Object.entries(MODOS).filter(([k]) => k !== 'peca3d' && k !== 'alterar').map(([k, m]) => [k, MODO_INFO[k].i, m.nome, MODO_INFO[k].d]),
+];
+const tile = (attrs, ic, nome, d, nc = '', cls = '') => `<button type="button" class="tile ${cls}" ${attrs}>${nc ? `<span class="nc">${nc}</span>` : ''}<span class="ci">${icon(ic)}</span><span><b>${nome}</b><span class="d">${d}</span></span></button>`;
+const num = (n, t) => `${String(n + 1).padStart(2, '0')} / ${String(t).padStart(2, '0')}`;
+$('#modos').innerHTML = TILES.map(([k, ic, nome, d], n) => tile(k === 'grupo3d' ? 'data-grupo="3d"' : `data-modo="${k}"`, ic, nome, d, num(n, TILES.length))).join('');
+function tiles3D() {
+  const t = [
+    ['data-modo="peca3d"', 'novo', 'Fazer uma peça nova', 'De raiz: dizes ao Claude o que queres e ele desenha. Depois colas aqui a resposta.', ''],
+    ['data-go="simples"', 'peca', 'Peças simples', 'Caixa, tampa, tubo, suporte em L ou placa: escolhes a peça e crias já.', 'so-pc'],
+    ['data-go="alterar"', 'alterar', 'Alterar uma peça que já tenho', 'Abres um ficheiro STL e mudas medidas, furas ou cortas.', 'so-pc'],
+  ];
+  if (geo) t.push(['data-go="editar"', 'seta', 'Continuar com a peça aberta', 'Voltar à peça que estavas a fazer.', 'so-pc']);
+  $('#tiles-3d').innerHTML = t.map(([a, ic, nome, d, c], n) => tile(a, ic, nome, d, num(n, t.length), c)).join('');
+}
+function passo1(grupo3d) {
+  $('#modos').hidden = grupo3d;
+  $('#modos-3d').hidden = !grupo3d;
+  $('.passo[data-passo="1"] > .q').hidden = grupo3d;
+  if (grupo3d) tiles3D();
+  else mostrarRascunho();
+}
+function mostrarRascunho() {
+  const el = $('#rascunho');
+  el.hidden = !rascunho();
+  if (!el.hidden) el.innerHTML = tile('data-continuar-pedido', 'seta', 'Continuar o pedido que estavas a escrever', esc(MODOS[modo].nome), '', 'tile-continuar');
+}
+$('#modos').addEventListener('click', (e) => { if (e.target.closest('[data-grupo]')) { passo1(true); window.scrollTo({ top: 0, behavior: 'smooth' }); } });
+$('#voltar-3d').addEventListener('click', () => passo1(false));
+/** Abre a Peça 3D no caminho pedido: simples | colar | alterar | editar. */
+function irPeca(caminho) {
+  pecaVista = caminho === 'editar' && !geo ? 'simples' : caminho;
+  if (pecaVista !== 'editar') pecaOrigem = pecaVista;
+  painelPeca();
+  goto('peca');
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-go]');
+  if (!b) return;
+  e.preventDefault();
+  irPeca(b.dataset.go);
+});
+/** Volta às escolhas do 3D, no Novo pedido. */
+function abrirHub3D() { goto('pedir'); setStep(1); passo1(true); }
+let rascunhoAtivo = false; // há um pedido a meio (escrito mas ainda não criado)
+function rascunho() { return rascunhoAtivo && modo && ($('#pedido').value.trim() || fotos.length > 0); }
 function setStep(n) {
   $$('#stepper li').forEach((li) => { const s = Number(li.dataset.s); li.className = s === n ? 'on' : s < n ? 'feito' : ''; });
   $$('.passo').forEach((p) => (p.hidden = Number(p.dataset.passo) !== n));
+  if (n === 1) passo1(false);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function avisoPeca() {
   const av = $('#aviso-peca');
   if (modo === 'alterar') {
     av.className = 'aviso on';
-    av.innerHTML = geo ? '<span class="ok">✓</span> Há uma peça aberta em <b>Peça 3D</b>. As medidas dela vão no pedido.' : '<span class="bad">✗</span> Ainda não abriste a peça. Abre-a primeiro em <a href="#peca">Peça 3D</a>, para o pedido levar as medidas. Se não, o Claude pergunta-te as medidas.';
+    av.innerHTML = geo ? '<span class="ok">✓</span> Há uma peça aberta em <b>Peça 3D</b>. As medidas dela vão no pedido.' : '<span class="bad">✗</span> Ainda não abriste a peça. Abre-a primeiro em <a href="#peca" data-go="alterar">Peça 3D</a>, para o pedido levar as medidas. Se não, o Claude pergunta-te as medidas.';
   } else av.className = 'aviso';
 }
-$('#modos').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-modo]');
-  if (!b) return;
+function escolherModo(b) {
   modo = b.dataset.modo;
-  $('#escolhido').innerHTML = `<span class="ci">${icon(MODO_INFO[modo].i)}</span><b>${MODOS[modo].nome}</b><button class="sec" id="mudar-tipo">Mudar</button>`;
-  $('#mudar-tipo').addEventListener('click', () => setStep(1));
+  rascunhoAtivo = true;
+  $('#escolhido').innerHTML = `<span class="ci">${icon(MODO_INFO[modo].i)}</span>${MODOS[modo].nome}`;
   $('#pedido').placeholder = MODOS[modo].placeholder;
   const rep = modo === 'reparacao';
   $('#areas').hidden = !rep;
@@ -317,17 +363,33 @@ $('#modos').addEventListener('click', (e) => {
   avisoPeca();
   setStep(2);
   setTimeout(() => $('#pedido').focus(), 300);
+}
+$('#tab-pedir').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-modo]');
+  if (b) escolherModo(b);
 });
 $('#voltar1').addEventListener('click', () => setStep(1));
 $('#voltar2').addEventListener('click', () => setStep(2));
-$('#novo-pedido').addEventListener('click', () => { $('#pedido').value = ''; pedidoAtualId = null; area = ''; fotos = []; descricao = ''; mostrarFotos(); $$('#areas-chips button').forEach((x) => x.classList.remove('on')); setStep(1); });
-$('#cartao-reparar').addEventListener('click', (e) => {
+$('#rascunho').addEventListener('click', (e) => { if (e.target.closest('[data-continuar-pedido]')) setStep(2); });
+// qualquer ligação ao Novo pedido (menu, Início, Continuar) abre no início; o que estava escrito fica à espera
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('a[href="#pedir"]');
+  if (a && a.dataset.pedirModo === undefined) setStep(1);
+});
+function limparPedido() { $('#pedido').value = ''; area = ''; fotos = []; descricao = ''; mostrarFotos(); $$('#areas-chips button').forEach((x) => x.classList.remove('on')); }
+$('#limpar-pedido').addEventListener('click', () => { limparPedido(); $('#pedido').focus(); });
+$('#novo-pedido').addEventListener('click', () => { limparPedido(); pedidoAtualId = null; setStep(1); });
+// links de "Fazer o pedido ao Claude" dentro da Peça 3D
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('[data-pedir-modo]');
+  if (!a) return;
   e.preventDefault();
   goto('pedir');
-  $('[data-modo="reparacao"]').click();
+  escolherModo({ dataset: { modo: a.dataset.pedirModo } });
 });
 $('#criar').addEventListener('click', () => {
   const texto = $('#pedido').value;
+  rascunhoAtivo = false;
   if (!texto.trim() && !confirm('Não escreveste nada. Queres criar o pedido na mesma?')) return;
   const rep = modo === 'reparacao';
   const areaPedido = rep ? area : '';
@@ -346,6 +408,9 @@ $('#criar').addEventListener('click', () => {
   const ir = $('#ir-destino');
   ir.hidden = !d;
   if (d) { ir.href = d[0]; ir.innerHTML = icon('seta') + d[1]; }
+  if (d && MODOS[modo].destino === 'peca') ir.innerHTML = icon('seta') + (modo === 'alterar' ? 'Voltar à peça' : 'Colar a peça');
+  ir.dataset.go = MODOS[modo].destino === 'peca' ? (modo === 'alterar' ? (geo ? 'editar' : 'alterar') : 'colar') : '';
+  if (!ir.dataset.go) delete ir.dataset.go;
   const soPc = !!d && d !== DESTINO.historico;
   ir.classList.toggle('so-pc', soPc);
   $('#pos-passos').classList.toggle('so-pc', soPc);
@@ -485,7 +550,8 @@ function drawBed() {
 }
 
 let geo = null;
-let pecaVista = 'escolha'; // escolha | fazer | alterar | editar
+let pecaVista = 'simples'; // simples | colar | alterar | editar
+let pecaOrigem = 'simples'; // caminho por onde se chegou, para o "Mudar de peça"
 let pecaModo = null; // fazer | alterar: como a peça aberta chegou cá
 let mesh = null;
 let previewMesh = null;
@@ -563,7 +629,11 @@ $('#melhor-pos').addEventListener('click', () => {
   later(() => {
     const r = G.melhorPosicao(geo, bed());
     if (!r) { toast(`A peça não cabe na ${nomeImp()} em nenhuma posição.`, true); return; }
-    if (!r.mudou) { toast('Já está na melhor posição para imprimir.'); return; }
+    if (!r.mudou) {
+      if (Math.abs(G.bbox(geo).min.z) > 0.01) setGeo(r.geo, 'A peça estava no ar: já está assente na mesa.', { fit: true });
+      else toast('Já está na melhor posição para imprimir.');
+      return;
+    }
     const { antes: a, depois: d } = r;
     setGeo(r.geo, 'Peça na melhor posição para imprimir.', { fit: true });
     faixaInfo = { titulo: 'Pus a peça na melhor posição para imprimir.', linhas: [
@@ -631,6 +701,7 @@ function setGeo(g, msg, { fit = false, noHistory = false } = {}) {
   faixaInfo = null;
   if (geo && !noHistory) { history.push(geo); if (history.length > 30) history.shift(); }
   geo = g;
+  if (pecaVista !== 'editar') for (const id of ['sec-medidas', 'sec-alterar', 'sec-guardar']) $('#' + id).open = false;
   pecaVista = 'editar';
   showMesh();
   previewMode = null;
@@ -761,7 +832,7 @@ $('#construir').addEventListener('click', () => {
   later(() => {
     try {
       const spec = extractJSON($('#json').value);
-      if (spec.pecas && !spec.operacoes) throw new Error('Isto é um projeto de madeira. Cola-o em "Ver projeto".');
+      if (spec.pecas && !spec.operacoes) throw new Error('Isto é um projeto de madeira. Cola-o em Projetos, "Colar um projeto".');
       const usarBase = $('#json-base').checked || String(spec.base || '').toLowerCase().startsWith('carreg');
       if (usarBase && !geo) throw new Error('Pediste para aplicar sobre a peça aberta, mas não há nenhuma peça aberta.');
       let out = buildSpec(spec, usarBase ? geo : null);
@@ -782,11 +853,11 @@ $('#construir').addEventListener('click', () => {
 // Painel da Peça 3D: primeiro escolhe-se fazer ou alterar; só depois aparecem medidas, alterações e guardar.
 function painelPeca() {
   const temGeo = !!geo;
-  const editar = pecaVista === 'editar' && temGeo;
+  if (pecaVista === 'editar' && !temGeo) pecaVista = 'simples';
+  const editar = pecaVista === 'editar';
   const alterar = editar && pecaModo === 'alterar';
-  $('#peca-escolha').hidden = pecaVista !== 'escolha';
-  $('#peca-continuar').hidden = !temGeo;
-  $('#caminho-fazer').hidden = pecaVista !== 'fazer';
+  $('#caminho-simples').hidden = pecaVista !== 'simples';
+  $('#caminho-colar').hidden = pecaVista !== 'colar';
   $('#caminho-alterar').hidden = pecaVista !== 'alterar';
   $('#peca-topo').hidden = !editar;
   $('#sec-claude').hidden = !alterar;
@@ -797,15 +868,17 @@ function painelPeca() {
   $('#peca-nome').textContent = 'Peça aberta: ' + ($('#nome-saida').value.replace(/\.stl$/i, '') || 'sem nome');
   if (!editar && previewMode) { previewMode = null; updatePreview(); }
 }
-$('#peca-tiles').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-caminho]');
-  if (!b) return;
-  pecaVista = b.dataset.caminho;
+$$('[data-peca-voltar]').forEach((b) => b.addEventListener('click', abrirHub3D));
+$('#peca-mudar').addEventListener('click', () => {
+  geo = null; history.length = 0; fittedOnce = false; faixaInfo = null; previewMode = null;
+  if (mesh) { PV.scene.remove(mesh); mesh.geometry.dispose(); mesh = null; }
+  updatePreview(); updateInfo(); avisoPeca();
+  $('#desfazer').disabled = true;
+  $('#nome-saida').value = 'peca.stl';
+  pecaVista = pecaOrigem;
   painelPeca();
+  PV.render();
 });
-$('#peca-continuar-btn').addEventListener('click', () => { pecaVista = 'editar'; painelPeca(); });
-$$('[data-peca-voltar]').forEach((b) => b.addEventListener('click', () => { pecaVista = geo ? 'editar' : 'escolha'; painelPeca(); }));
-$('#peca-mudar').addEventListener('click', () => { pecaVista = 'escolha'; painelPeca(); });
 painelPeca();
 $('#nome-saida').addEventListener('input', () => painelPeca());
 
@@ -1139,12 +1212,12 @@ function readProj(registar = true) {
   erro.className = 'erro';
   try {
     const spec = extractJSON($('#proj-json').value);
-    if (spec.operacoes && !spec.pecas) throw new Error('Isto é uma peça para impressão 3D. Cola-a em "Peça 3D" → "Importar do Claude".');
+    if (spec.operacoes && !spec.pecas) throw new Error('Isto é uma peça para impressão 3D. Cola-a em Novo pedido → Peça 3D → "Fazer uma peça nova".');
     showProject(spec);
     if (registar) {
       const r = H.registarProjeto(hist, spec);
       if (r.lista !== hist) setHist(r.lista);
-      toast('Projeto desenhado. Ficou guardado no Histórico.');
+      toast('Projeto desenhado. Ficou guardado em Projetos.');
     } else toast('Projeto desenhado.');
   } catch (e) {
     console.error(e);
@@ -1324,7 +1397,7 @@ function renderHist() {
   // a sincronização pode redesenhar enquanto o pai escreve: guardar o rascunho
   const rascunho = editarResposta ? $(`#resp-${editarResposta}`)?.value : null;
   if (!lista.length) {
-    $('#hist-lista').innerHTML = `<div class="bloco hist-vazio"><span class="ci">${icon('historico')}</span><div><p>Ainda não há pedidos. Quando fizeres um pedido de madeira, uma reparação, um plano de trabalho ou "outra coisa", aparece aqui.</p><a class="btn" href="#pedir">${icon('pedir')}Fazer um pedido</a></div></div>`;
+    $('#hist-lista').innerHTML = `<div class="bloco hist-vazio"><span class="ci">${icon('historico')}</span><div><p>Ainda não há pedidos. Quando fizeres um pedido de madeira, uma reparação, um plano de trabalho ou "outra coisa", aparece aqui.</p><a class="btn" href="#pedir">${icon('pedir')}Novo pedido</a></div></div>`;
     return;
   }
   $('#hist-lista').innerHTML = lista.map((e) => {
@@ -1381,7 +1454,7 @@ $('#hist-lista').addEventListener('click', async (ev) => {
     later(() => readProj(false));
   } else if (b.dataset.acao === 'copiar') {
     if (await copiarTexto(e.pedido)) toast('Pedido copiado. Cola-o no Claude.');
-    else toast('Não consegui copiar. Faz o pedido outra vez em "Pedir ao Claude".', true);
+    else toast('Não consegui copiar. Faz o pedido outra vez em "Novo pedido".', true);
   } else if (b.dataset.acao === 'resp-editar') {
     editarResposta = e.id;
     renderHist();
@@ -1490,7 +1563,7 @@ function renderContinuar() {
   for (const r of reps) {
     h += `<div class="cont-cartao"><h3>${icon('reparar')}${esc(H.titulo(r, NOMES_MODO))}</h3><p>Por resolver${r.area ? ' · ' + esc(r.area) : ''}</p><button class="sec grande" data-cont="${esc(r.id)}">${r.resposta ? 'Ver a resposta' : 'Abrir'}</button></div>`;
   }
-  h += `<div class="cont-botoes"><a class="btn grande" href="#pedir">${icon('pedir')}Fazer um pedido</a><button class="sec grande" data-cont="reparar">${icon('reparar')}Reparar</button></div>`;
+  h += `<div class="cont-botoes"><a class="btn grande" href="#pedir">${icon('pedir')}Novo pedido</a><button class="sec grande" data-cont="reparar">${icon('reparar')}Reparar</button></div>`;
   $('#continuar').innerHTML = h;
 }
 $('#continuar').addEventListener('click', (ev) => {
