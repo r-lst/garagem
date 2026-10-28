@@ -81,6 +81,11 @@
     <label for="pedido" class="q" id="pedido-l">O que queres?</label>
     <textarea id="pedido" rows="7"></textarea>
     <div class="dicas" id="pedido-dicas"></div>
+    <div id="fotos-bloco" hidden>
+      <p class="q q-peq">Fotos <span class="muted">(opcional, até 3)</span></p>
+      <label class="btn sec ficheiro-btn" data-i="imagem">Juntar foto<input type="file" id="fotos-in" accept="image/*" multiple></label>
+      <div class="fotos-mini" id="fotos-mini"></div>
+    </div>
     <div id="aviso-peca" class="aviso"></div>
     <div class="row entre">
       <button class="sec" id="voltar1" data-i="voltar">Voltar</button>
@@ -89,6 +94,13 @@
   </div>
 
   <div class="passo" data-passo="3" hidden>
+    <div class="bloco" id="descricao-bloco" hidden>
+      <h3>Fotos</h3>
+      <p class="muted">O Gemini descreve o que vê nas fotos e a descrição vai no pedido. As fotos são enviadas à Google: evita pessoas e documentos.</p>
+      <div class="row"><button id="descrever-fotos" data-i="imagem">Descrever as fotos</button><span id="descrever-estado" class="muted"></span></div>
+      <div id="descricao-caixa" hidden><label for="descricao">O que se vê nas fotos (podes corrigir)</label><textarea id="descricao" rows="5"></textarea></div>
+      <div id="descrever-erro" class="erro"></div>
+    </div>
     <div class="acoes">
       <div class="acao"><b>1</b><div><h4>Copiar o pedido</h4><button id="copiar" class="grande" data-i="copiar">Copiar pedido</button><span id="copiado" class="ok" hidden></span></div></div>
       <div class="acao"><b>2</b><div><h4>Abrir o Claude</h4><a id="abrir-claude" class="btn sec grande" href="https://claude.ai/new" target="_blank" rel="noopener" data-i="abrir">Abrir o Claude</a></div></div>
