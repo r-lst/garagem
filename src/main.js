@@ -301,7 +301,7 @@ const TILES = [
 ];
 const tile = (attrs, ic, nome, d, nc = '', cls = '') => `<button type="button" class="tile ${cls}" ${attrs}>${nc ? `<span class="nc">${nc}</span>` : ''}<span class="ci">${icon(ic)}</span><span><b>${nome}</b><span class="d">${d}</span></span></button>`;
 const num = (n, t) => `${String(n + 1).padStart(2, '0')} / ${String(t).padStart(2, '0')}`;
-$('#modos').innerHTML = TILES.map(([k, ic, nome, d], n) => tile(k === 'grupo3d' ? 'data-grupo="3d"' : `data-modo="${k}"`, ic, nome, d, num(n, TILES.length))).join('');
+$('#modos').innerHTML = TILES.map(([k, ic, nome, d], n) => tile(k === 'grupo3d' ? 'data-grupo="3d"' : `data-modo="${k}"`, ic, nome, d, num(n, TILES.length), k === 'grupo3d' ? 'so-pc' : '')).join('');
 function tiles3D() {
   const t = [
     ['data-modo="peca3d"', 'novo', 'Fazer uma peça nova', 'De raiz: dizes ao Claude o que queres e ele desenha. Depois colas aqui a resposta.', ''],
@@ -1413,19 +1413,16 @@ function renderHist() {
     const prog = e.estado === 'projeto' ? progressoCortes(e) : null;
     const pronto = e.estado === 'projeto' || e.estado === 'resolvida';
     const estado = e.estado === 'projeto' ? 'Projeto pronto' : e.estado === 'resolvida' ? 'Resolvida' : 'Pedido feito';
-    const texto = String(e.texto || '').trim();
     const resposta = String(e.resposta || '');
     const editar = editarResposta === e.id;
     return `<article class="hist-item" data-id="${esc(e.id)}">
       <div class="hist-top"><span class="ci">${icon(MODO_INFO[e.modo]?.i || 'outro')}</span>
         <div class="hist-tit"><h3>${esc(H.titulo(e, NOMES_MODO))}</h3><p class="muted">${esc(quando(e.criado))} · ${esc(NOMES_MODO[e.modo] || '')}${e.area ? ' · ' + esc(e.area) : ''}${prog && prog.feitos ? ` · ${prog.feitos} de ${prog.total} cortes feitos` : ''}</p></div>
         <span class="estado ${pronto ? 'pronto' : ''}">${pronto ? icon('certo') : ''}${estado}</span></div>
-      ${texto && (e.estado === 'projeto' || texto.length > 60) ? `<p class="hist-texto">«${esc(texto)}»</p>` : ''}
       ${comResposta && resposta && !editar ? `<details class="hist-resposta"${abrirResposta === e.id ? ' open' : ''}><summary>Resposta do Claude</summary><div>${esc(resposta)}</div></details>` : ''}
       ${editar ? `<label class="q-peq" for="resp-${esc(e.id)}">Cola aqui a resposta do Claude</label><textarea id="resp-${esc(e.id)}" rows="8">${esc(rascunho ?? resposta)}</textarea>
         <div class="row"><button data-acao="resp-guardar">${icon('guardar')}Guardar a resposta</button><button class="sec" data-acao="resp-cancelar">Cancelar</button></div>` : `<div class="row">
         ${e.estado === 'projeto' ? `<button data-acao="oficina">${icon('oficina')}Abrir na oficina</button><button class="sec so-pc" data-acao="ver">${icon('projeto')}Ver em 3D</button>` : ''}
-        ${e.pedido ? `<button class="sec" data-acao="copiar">${icon('copiar')}Copiar o pedido</button>` : ''}
         ${comResposta ? `<button class="sec" data-acao="resp-editar">${icon('colar')}${resposta ? 'Mudar a resposta' : 'Guardar a resposta'}</button>` : ''}
         ${rep ? `<button class="sec" data-acao="resolvida">${icon('certo')}${e.estado === 'resolvida' ? 'Voltar a abrir' : 'Marcar como resolvida'}</button>` : ''}
         <button class="sec" data-acao="apagar">${icon('apagar')}Apagar</button>
@@ -1459,9 +1456,6 @@ $('#hist-lista').addEventListener('click', async (ev) => {
     $('#proj-json').value = JSON.stringify(e.projeto, null, 1);
     goto('projeto');
     later(() => readProj(false));
-  } else if (b.dataset.acao === 'copiar') {
-    if (await copiarTexto(e.pedido)) toast('Pedido copiado. Cola-o no Claude.');
-    else toast('Não consegui copiar. Faz o pedido outra vez em "Novo pedido".', true);
   } else if (b.dataset.acao === 'resp-editar') {
     editarResposta = e.id;
     renderHist();
@@ -1610,7 +1604,8 @@ function renderContinuar() {
   const proj = vis.filter((e) => e.estado === 'projeto').sort((a, b) => b.atualizado - a.atualizado)
     .find((e) => { const p = progressoCortes(e); return p && p.feitos < p.total; });
   const reps = vis.filter((e) => e.modo === 'reparacao' && e.estado !== 'resolvida').slice(0, 2);
-  let h = proj || reps.length ? '<h2>Continuar</h2>' : '<h2>O que vamos fazer?</h2><p class="muted">Ainda não há nada em curso. Pede ajuda para uma reparação ou para um projeto.</p>';
+  const botoes = `<div class="cont-botoes"><a class="btn" href="#pedir">${icon('pedir')}Novo pedido</a><button class="sec" data-cont="reparar">${icon('reparar')}Reparar</button></div>`;
+  let h = proj || reps.length ? botoes + '<h2>Continuar</h2>' : '<h2>O que vamos fazer?</h2><p class="muted">Ainda não há nada em curso. Pede ajuda para uma reparação ou para um projeto.</p>' + botoes;
   if (proj) {
     const p = progressoCortes(proj);
     h += `<div class="cont-cartao"><h3>${icon('madeira')}${esc(H.titulo(proj, NOMES_MODO))}</h3><p>${p.feitos} de ${p.total} cortes feitos</p><a class="btn grande" href="#oficina=${esc(proj.id)}">${icon('oficina')}Abrir na oficina</a></div>`;
@@ -1618,7 +1613,6 @@ function renderContinuar() {
   for (const r of reps) {
     h += `<div class="cont-cartao"><h3>${icon('reparar')}${esc(H.titulo(r, NOMES_MODO))}</h3><p>Por resolver${r.area ? ' · ' + esc(r.area) : ''}</p><button class="sec grande" data-cont="${esc(r.id)}">${r.resposta ? 'Ver a resposta' : 'Abrir'}</button></div>`;
   }
-  h += `<div class="cont-botoes"><a class="btn grande" href="#pedir">${icon('pedir')}Novo pedido</a><button class="sec grande" data-cont="reparar">${icon('reparar')}Reparar</button></div>`;
   $('#continuar').innerHTML = h;
 }
 $('#continuar').addEventListener('click', (ev) => {
@@ -1710,7 +1704,7 @@ function mostrarSync() {
   else if (syncEstado?.ok) { h = `✓ Cópia online em dia${syncCfg.ultima ? ' (' + quando(syncCfg.ultima) + ')' : ''}.`; cls = 'ok'; }
   else if (syncEstado) { h = `✗ Cópia online: ${syncEstado.msg} O histórico continua guardado neste aparelho.`; cls = 'bad'; }
   else h = 'Cópia online ligada.';
-  el.hidden = false;
+  el.hidden = cls !== 'bad'; // no Histórico só interessa quando falha
   el.className = 'hist-sync ' + cls;
   el.textContent = h;
   est.className = cls;

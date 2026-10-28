@@ -71,8 +71,8 @@ A página só fala com o **Worker da Garagem** (`WORKER_URL`), e só para os uso
 - Mudar o formato: atualizar `historico.js`, `test-historico.mjs` e manter a leitura das entradas antigas.
 
 ## Telemóvel (até 700 px de largura)
-- O menu de cima dá lugar a uma barra em baixo: Início, Projetos (= Histórico), Novo pedido, Ferramentas. Sem "Mais": Ver projeto, Peça 3D e Equipamento só no computador. Decide-se pela largura, não pelo aparelho.
-- Início mostra "Continuar": o projeto mais recente com cortes por fazer e até 2 reparações por resolver. A apresentação e a mesa 3D só no computador.
+- O menu de cima dá lugar a uma barra em baixo: Início, Projetos (= Histórico), Pedir (= Novo pedido), Ferramentas. Sem "Mais": Ver projeto, Peça 3D e Equipamento só no computador (o cartão Peça 3D do Novo pedido também fica escondido no telemóvel). Decide-se pela largura, não pelo aparelho.
+- Início começa com **Novo pedido** e **Reparar**; depois "Continuar": o projeto mais recente com cortes por fazer e até 2 reparações por resolver. A apresentação e a mesa 3D só no computador.
 - **Modo oficina** (`#oficina=<id>`, também no computador): Cortar / Comprar / Montar. Tocar numa linha de Cortar risca-a (fica em `oficina` na entrada e vai na cópia online); o riscado desce para o fim do grupo.
 - **Comprar** é a lista de compras do projeto: cada toque passa a linha por *por comprar → já tenho → comprado → por comprar* (`oficina.tenho` e `oficina.comprar`; as entradas antigas, só com `comprar`, leem-se como comprado). Por baixo, **Juntar à lista** (botões de lixa, cola, verniz… e campo "Outra coisa" → `oficina.extras`, linhas com chave `x|…`) e **Partilhar a lista** (partilha do telemóvel, ou copia; leva só o que ainda falta). Montar mostra a `resposta` guardada. Ecrã sempre ligado (Wake Lock) enquanto está aberto.
 - As chaves das linhas (`oficina.js`) não dependem do comprimento da tábua: mudar a tábua em Cortes não perde o que foi riscado. Não as mudar sem migrar.
@@ -110,7 +110,7 @@ Menu de cartões (`#ferramentas`); cada ferramenta tem a sua página com "voltar
 - Para ver o resultado sem impressora: Edge sem janela com `--print-to-pdf` sobre uma cópia do `dist/index.html` que carrega no botão.
 
 ## Peça 3D: fluxo
-- Abre com duas escolhas: **Fazer uma peça nova** (criar peça simples, ou colar o bloco do Claude) e **Alterar uma peça que já tenho** (abrir STL; depois também "Pedir alterações ao Claude", aplicado sobre a peça aberta). Só com a peça aberta aparecem Medidas, Alterar e Guardar (`painelPeca()` em `main.js`; estado `pecaVista`/`pecaModo`). "Mudar de peça" volta às duas escolhas, com "Continuar com a peça aberta".
+- A Peça 3D **não está no menu**: entra-se por **Novo pedido → Peça 3D**, que abre três escolhas: **Fazer uma peça nova** (de raiz: pedido ao Claude; depois "Colar a peça"), **Peças simples** (geradores predefinidos) e **Alterar uma peça que já tenho** (abrir STL; lá dentro também "Pedir alterações ao Claude", aplicado sobre a peça aberta). O Voltar leva a estas escolhas; "Mudar de peça" limpa a peça e volta ao caminho por onde entrou. Só com a peça aberta aparecem Medidas, Alterar e Guardar, todos fechados (`painelPeca()` em `main.js`; estado `pecaVista`/`pecaModo`/`pecaOrigem`). O Novo pedido abre sempre no passo 1; um pedido escrito e não criado fica à espera como "Continuar o pedido" (`rascunho()`).
 
 ## Equipamento
 - Impressora num resumo de uma linha, com "Mudar a impressora" (modelo, material, bico, programa, volume). Ferramentas e materiais são botões de toque + campo "Outras"; continuam guardados como texto em `ferramentas` e `madeiras` (o que não corresponde a um botão vai para "Outras", nada se perde). Notas escondidas até serem precisas.
